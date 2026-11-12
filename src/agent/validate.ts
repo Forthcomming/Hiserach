@@ -7,6 +7,7 @@ import type {
   ToolBundle,
 } from "@/domain/types";
 import { modeOf, referenceIdsOf } from "@/tools/runTools";
+import { NO_SIMILAR_FEEDBACK_NOTICE } from "./notices";
 
 const close = (a: number | undefined, b: number | undefined): boolean => {
   if (a === undefined || b === undefined) return a === b;
@@ -83,6 +84,15 @@ export function assembleAnswer(args: {
     ...(mode === "small_sample" ? ["同类人样本量较小，结论仅供参考"] : []),
   ];
 
+  // 有用户条件但同类人 0 人：诚实空态（二期 §3.4）；冷启动无条件不提示
+  const peerEmpty =
+    mode === "global" &&
+    args.appliedConditions.length > 0 &&
+    (bundle.similarSummary?.authorCount ?? 0) === 0;
+  const notice =
+    args.notice ??
+    (peerEmpty ? { text: NO_SIMILAR_FEEDBACK_NOTICE } : undefined);
+
   return {
     mode,
     appliedConditions: args.appliedConditions,
@@ -91,7 +101,7 @@ export function assembleAnswer(args: {
     products: bundle.rankedProducts ?? (bundle.primaryProduct ? [bundle.primaryProduct] : []),
     alternatives: bundle.alternatives,
     ...(bundle.followup ? { followup: bundle.followup } : {}),
-    ...(args.notice ? { notice: args.notice } : {}),
+    ...(notice ? { notice } : {}),
     disclaimers,
     datasetNote: bundle.datasetNote,
     traceId: turnId,

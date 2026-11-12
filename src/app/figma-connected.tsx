@@ -88,10 +88,12 @@ const changeOptions: Record<string, string[]> = {
   age_month: ["6个月", "7个月", "8个月", "9个月"],
 };
 const traceLabels: Record<string, string> = {
+  assemble_session_context: "组装会话上下文",
   understand_query: "理解查询",
   load_memory: "读取记忆",
   decide_followup: "判断是否追问",
   build_global_answer: "生成全站答案",
+  build_general_answer: "通用建议",
   run_tools: "调用工具",
   compose_answer: "生成答案",
   validate_answer: "校验数字与原话",
@@ -149,6 +151,70 @@ function recommendationText(product: ProductAnswer, mode: AnswerPayload["mode"])
   }
   if (mode === "small_sample" && similar) return `${similar.recommendCount} 人推荐`;
   return `${percent(product.globalSummary?.recommendRate ?? 0)} 人推荐`;
+}
+
+const foundationShades = [
+  { id: "1C0", name: "贝壳白", tone: "冷调", color: "#f4d3bc" },
+  { id: "1W1", name: "暖象牙", tone: "暖调", color: "#eac09d" },
+  { id: "1N1", name: "象牙裸", tone: "中性调", color: "#e6b895" },
+  { id: "2W0", name: "暖香草", tone: "暖调", color: "#dca77d" },
+] as const;
+
+function FoundationProductDetails({
+  productName,
+  recommendation,
+}: {
+  productName: string;
+  recommendation: string;
+}) {
+  const [selectedShade, setSelectedShade] = useState<(typeof foundationShades)[number]>(
+    foundationShades[2],
+  );
+
+  return (
+    <section className="foundation-details" aria-label={`${productName}商品信息与色号选择`}>
+      <div className="foundation-details-head">
+        <div>
+          <span>商品介绍</span>
+          <h3>{productName} 持妆粉底液</h3>
+        </div>
+        <em>{recommendation}</em>
+      </div>
+      <p className="foundation-description">
+        中高遮瑕的半哑光妆效，适合希望长时间保持底妆完整的人群；偏干肤质建议先做好保湿打底。
+      </p>
+      <div className="foundation-features" aria-label="商品特点">
+        <span>中高遮瑕</span>
+        <span>半哑光</span>
+        <span>长效持妆</span>
+      </div>
+      <div className="shade-heading">
+        <b>选择色号</b>
+        <span>{selectedShade.id} · {selectedShade.name}</span>
+      </div>
+      <div className="shade-options" role="group" aria-label="选择粉底色号">
+        {foundationShades.map((shade) => (
+          <button
+            key={shade.id}
+            type="button"
+            className={selectedShade.id === shade.id ? "active" : ""}
+            aria-pressed={selectedShade.id === shade.id}
+            aria-label={`${shade.id} ${shade.name} ${shade.tone}`}
+            onClick={() => setSelectedShade(shade)}
+          >
+            <i style={{ background: shade.color }} />
+            <b>{shade.id}</b>
+            <small>{shade.tone}</small>
+          </button>
+        ))}
+      </div>
+      <p className="shade-selection">
+        <Icon name="check" size={14} />
+        已选择 {selectedShade.id} {selectedShade.name}（{selectedShade.tone}）
+      </p>
+      <p className="shade-note">色号为交互示例，实际购买请以官方在售色号和试色结果为准。</p>
+    </section>
+  );
 }
 function quoteTarget(
   product: ProductAnswer,
@@ -325,19 +391,23 @@ function DynamicAnswer({
   onRetry: () => void;
   onSearch: (message: string) => void;
 }) {
-  if (answer.notice)
+  if (answer.mode === "general") {
     return (
       <article className="answer-card unsupported-card">
-        <p>{answer.notice.text}</p>
-        <div className="unsupported-options">
-          {answer.notice.quickTags.map((tag) => (
-            <button key={tag} onClick={() => onSearch(tag)}>
-              {tag}
-            </button>
-          ))}
-        </div>
+        {answer.adviceText && <p className="general-advice">{answer.adviceText}</p>}
+        {answer.notice && <p className="peer-empty-notice">{answer.notice.text}</p>}
+        {!!answer.notice?.quickTags?.length && (
+          <div className="unsupported-options">
+            {answer.notice.quickTags.map((tag) => (
+              <button key={tag} onClick={() => onSearch(tag)}>
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
       </article>
     );
+  }
   const product = answer.products[0];
   if (!product) return null;
   const rice = product.productId.startsWith("p_rice");
@@ -355,6 +425,9 @@ function DynamicAnswer({
             </span>
             <Icon name="chevron" size={17} />
           </button>
+        )}
+        {answer.notice && (
+          <p className="peer-empty-notice">{answer.notice.text}</p>
         )}
         {!rice && (
           <img
@@ -507,10 +580,10 @@ function DynamicAnswer({
                 {answer.globalSummary.keyRisk || "同类反馈供参考"}
               </div>
             ) : (
-              <p className="mt-3 mb-0 border-b border-[#eee] pb-3 text-[11px] text-[#999]">
-                全站 {percent(answer.globalSummary.recommendRate)} 推荐
-                {answer.globalSummary.keyRisk ? ` · ${answer.globalSummary.keyRisk}` : ""}
-              </p>
+              <FoundationProductDetails
+                productName={product.name}
+                recommendation={`全站 ${percent(answer.globalSummary.recommendRate)} 推荐${answer.globalSummary.keyRisk ? ` · ${answer.globalSummary.keyRisk}` : ""}`}
+              />
             )}
             {rice && (
               <section className="product-card">
@@ -886,17 +959,15 @@ function ConnectedMemory({
           <Icon name="back" size={27} />
         </button>
         <h1>我的记忆</h1>
-        <button className="info-button" aria-label="记忆说明">
-          <Icon name="info" size={18} />
-        </button>
+        <span aria-hidden="true" />
       </header>
       {error && <p className="memory-error">{error}</p>}
       {active.length ? (
         <section className="memory-group">
           <div className="memory-group-title">
-            <span
-              className={`category-icon ${session.persona === "xiaolin" ? "beauty" : "baby"}`}
-            />
+            <span className={`category-icon ${session.persona === "xiaolin" ? "beauty" : "baby"}`}>
+              <Icon name={session.persona === "xiaolin" ? "sparkle" : "memory"} size={18} />
+            </span>
             <div>
               <b>{session.persona === "xiaolin" ? "护肤彩妆" : "母婴辅食"}</b>
             </div>
@@ -906,18 +977,9 @@ function ConnectedMemory({
               <div className="memory-row-top">
                 <div>
                   <b>{valueOf(memory)}</b>
-                  <span>{memory.isCore ? "核心条件" : "辅助条件"}</span>
                 </div>
                 <Icon name="chevron" size={18} />
               </div>
-              <p>
-                {memory.source.query
-                  ? `来自搜索“${memory.source.query}”时的补充`
-                  : memory.source.channel === "preset"
-                    ? "来自预置身份"
-                    : "来自你的主动补充"}
-              </p>
-              <time>更新于 {new Date(memory.createdAt).toLocaleDateString("zh-CN")}</time>
             </button>
           ))}
         </section>
@@ -933,7 +995,6 @@ function ConnectedMemory({
       <div className="sheet-switch memory-toggle">
         <div>
           <b>本次不按我的条件</b>
-          <span>只影响当前对话</span>
         </div>
         <button
           className={disabled ? "on" : ""}
@@ -1040,14 +1101,6 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
     setBusy(true);
     setDraft("");
     const shown = selection ? selection.map((item) => item.value).join("、") : message.trim();
-    const previousProduct = turns.at(-1)?.answer.products[0]?.productId;
-    const contextualMessage =
-      !selection &&
-      previousProduct?.startsWith("p_rice") &&
-      !message.includes("米粉") &&
-      /(宝宝|个月|月龄|过敏|湿疹|腹泻)/.test(message)
-        ? `婴儿米粉推荐，${message}`
-        : message;
     try {
       const requestChat = async (sessionId: string) => {
         const response = await fetch("/api/chat", {
@@ -1055,7 +1108,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sessionId,
-            message: contextualMessage,
+            message,
             followupSelection: selection,
           }),
         });
@@ -1123,7 +1176,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
           {
             id: crypto.randomUUID(),
             text: shown,
-            request: contextualMessage,
+            request: message,
             selection,
             answer,
             turnId: turnId || answer.traceId,

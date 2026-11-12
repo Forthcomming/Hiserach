@@ -24,7 +24,16 @@ export function AnswerCard({ answer, turnId, sessionId, onConditions, onQuotes, 
   onSearch: (message: string, selection?: Array<{ key: string; value: string }>) => void;
 }) {
   const similar = answer.similarSummary;
-  if (answer.notice) return <article className="notice-answer"><WarningCircle weight="fill" /><h2>{answer.notice.text}</h2><p>请选择一个已覆盖的问题，查看完整的同类人口碑。</p><div>{answer.notice.quickTags.map((tag) => <button key={tag} onClick={() => onSearch(tag)}>{tag}</button>)}</div></article>;
+  if (answer.mode === "general") {
+    return (
+      <article className="notice-answer">
+        <WarningCircle weight="fill" />
+        {answer.adviceText && <h2>{answer.adviceText}</h2>}
+        {answer.notice && <p>{answer.notice.text}</p>}
+        <div>{(answer.notice?.quickTags ?? []).map((tag) => <button key={tag} onClick={() => onSearch(tag)}>{tag}</button>)}</div>
+      </article>
+    );
+  }
   const title = answer.mode === "similar" && similar
     ? `和你情况相似的 ${similar.authorCount} 人中，${similar.recommendCount} 人推荐`
     : answer.mode === "small_sample" && similar
@@ -32,6 +41,7 @@ export function AnswerCard({ answer, turnId, sessionId, onConditions, onQuotes, 
       : `整体 ${percent(answer.globalSummary.recommendRate)} 的人推荐`;
   return <article className="answer-block">
     {!!answer.appliedConditions.length && <button className="condition-banner" onClick={onConditions}><span><Check weight="bold" />已按你的条件筛选</span><span>{answer.appliedConditions.map((item) => item.valueLabel).join(" · ")}<CaretDown /></span></button>}
+    {answer.notice && <p className="peer-empty-notice"><WarningCircle />{answer.notice.text}</p>}
     <div className={`insight ${answer.mode}`}><div className="eyebrow"><Sparkle weight="fill" /> 同类人口碑</div><h2>{title}</h2>
       {similar && answer.mode !== "global" && <div className="vote-summary"><div className="vote-track"><span style={{ width: `${similar.authorCount ? (similar.recommendCount / similar.authorCount) * 100 : 0}%` }} /></div><div className="vote-labels"><span><ThumbsUp weight="fill" />{similar.recommendCount} 人推荐</span><span><ThumbsDown weight="fill" />{similar.notRecommendCount} 人不推荐</span></div></div>}
       <p>只统计作者明确说过的自身条件，每个作者只计一次。</p>
@@ -68,7 +78,7 @@ function Followup({ card, onSearch }: { card: FollowupCard; onSearch: (message: 
   </section>;
 }
 
-const traceLabels: Record<string, string> = { understand_query: "理解查询", load_memory: "读取记忆", decide_followup: "判断是否追问", build_global_answer: "生成全站答案", run_tools: "同类匹配与原因聚合", compose_answer: "组织答案", validate_answer: "校验数字与引用", render_template: "模板兜底", persist_memory: "写入记忆", persist_trace: "记录执行过程" };
+const traceLabels: Record<string, string> = { assemble_session_context: "组装会话上下文", understand_query: "理解查询", load_memory: "读取记忆", decide_followup: "判断是否追问", build_global_answer: "生成全站答案", build_general_answer: "通用建议", run_tools: "同类匹配与原因聚合", compose_answer: "组织答案", validate_answer: "校验数字与引用", render_template: "模板兜底", persist_memory: "写入记忆", persist_trace: "记录执行过程" };
 
 function Trace({ turnId, sessionId }: { turnId: string; sessionId: string }) {
   const [open, setOpen] = useState(false);

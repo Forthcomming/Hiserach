@@ -16,6 +16,7 @@ class NullGateway implements ModelGateway {
   readonly configured = false;
   async understandQuery() { return null; }
   async composeAnswer() { return null; }
+  async composeGeneralAdvice() { return null; }
 }
 
 function draftFrom(bundle: ToolBundle, overrides: Partial<AnswerDraft> = {}): AnswerDraft {
@@ -36,6 +37,9 @@ function draftFrom(bundle: ToolBundle, overrides: Partial<AnswerDraft> = {}): An
 class GoodGateway implements ModelGateway {
   readonly configured = true;
   async understandQuery() { return null; }
+  async composeGeneralAdvice({ query }: { query: string }) {
+    return { text: `关于「${query}」的通用选购建议：先看需求场景与成分，再小样试用。` };
+  }
   async composeAnswer({ bundle }: { bundle: ToolBundle }) {
     return draftFrom(bundle);
   }
@@ -46,6 +50,7 @@ class FollowupMisclassifyingGateway implements ModelGateway {
   async understandQuery() {
     return { intent: "unsupported" as const, productIds: [], statedConditions: [] };
   }
+  async composeGeneralAdvice() { return null; }
   async composeAnswer({ bundle }: { bundle: ToolBundle }) {
     return draftFrom(bundle);
   }
@@ -56,6 +61,7 @@ class RetryThenGoodGateway implements ModelGateway {
   readonly configured = true;
   calls = 0;
   async understandQuery() { return null; }
+  async composeGeneralAdvice() { return null; }
   async composeAnswer({ bundle }: { bundle: ToolBundle }) {
     this.calls += 1;
     return this.calls === 1
@@ -69,6 +75,7 @@ class AlwaysBadGateway implements ModelGateway {
   readonly configured = true;
   calls = 0;
   async understandQuery() { return null; }
+  async composeGeneralAdvice() { return null; }
   async composeAnswer({ bundle }: { bundle: ToolBundle }) {
     this.calls += 1;
     return draftFrom(bundle, { reasonIds: ["fake_reason"] });
@@ -226,7 +233,7 @@ describe("Agent 状态图端到端链路", () => {
     expect(state.answer?.products).toHaveLength(2);
   });
 
-  it("AC-02 超范围查询：不调用统计工具、不写记忆、只给受限提示", async () => {
+  it("AC-02 超范围查询：通用建议 + 无同类人数据声明，不调用统计工具、不写记忆", async () => {
     const { state, repo, userId } = await run({
       persona: "xiaolin",
       query: "给我推荐一款手机",
@@ -234,10 +241,82 @@ describe("Agent 状态图端到端链路", () => {
     });
     expect(state.unsupported).toBe(true);
     expect(state.toolResult).toBeUndefined();
+    expect(state.answer?.mode).toBe("general");
+    expect(state.answer?.adviceText).toContain("手机");
+    expect(state.answer?.notice?.text).toContain("暂时没有同类人数据");
     expect(state.answer?.notice?.quickTags).toEqual(["DW粉底", "婴儿米粉推荐"]);
     expect(state.answer?.products).toEqual([]);
+    expect(state.answer?.globalSummary.recommendRate).toBe(0);
     expect(await repo.listMemories(userId)).toHaveLength(2); // 仅预置记忆，无新增
-    expect(nodeNames(awaitTraceEvents(state))).not.toContain("run_tools");
+    const nodes = nodeNames(awaitTraceEvents(state));
+    expect(nodes).not.toContain("run_tools");
+    expect(nodes).toContain("build_general_answer");
+  });
+
+  it("会话 Continuity：上轮 DW 后「那混油皮呢」继承品类并抽取肤质", async () => {
+    const first = await run({
+      persona: "xiaolin",
+      query: "DW粉底",
+      model: new GoodGateway(),
+    });
+    expect(first.state.answer?.mode).toBe("similar");
+
+    const second = await run({
+      repo: first.repo,
+      userId: first.userId,
+      sessionId: first.sessionId,
+      query: "那混油皮呢",
+      model: new GoodGateway(),
+    });
+    expect(second.state.unsupported).toBe(false);
+    expect(second.state.queryUnderstanding?.category).toBe("beauty");
+    expect(second.state.queryUnderstanding?.productIds).toContain("p_dw_foundation");
+    expect(
+      second.state.queryUnderstanding?.statedConditions.some(
+        (c) => c.key === "skin_type" && c.value === "混油",
+      ),
+    ).toBe(true);
+  });
+
+  it("会话 Continuity：上轮后「替代那款呢」继承产品并走工具链", async () => {
+    const first = await run({
+      persona: "xiaolin",
+      query: "DW粉底",
+      model: new GoodGateway(),
+    });
+    const second = await run({
+      repo: first.repo,
+      userId: first.userId,
+      sessionId: first.sessionId,
+      query: "替代那款呢",
+      model: new GoodGateway(),
+    });
+    expect(second.state.unsupported).toBe(false);
+    expect(second.state.queryUnderstanding?.productIds).toContain("p_dw_foundation");
+    expect(second.state.toolResult).toBeDefined();
+    expect(second.state.answer?.alternatives.map((p) => p.productId)).toContain(
+      "p_alt_foundation",
+    );
+  });
+
+  it("会话 Continuity：米粉补充条件无需前端拼接前缀", async () => {
+    const first = await run({
+      persona: "xiaob",
+      query: "婴儿米粉推荐",
+      model: new GoodGateway(),
+    });
+    const second = await run({
+      repo: first.repo,
+      userId: first.userId,
+      sessionId: first.sessionId,
+      query: "宝宝7个月，吃蛋黄过敏过",
+      model: new GoodGateway(),
+    });
+    expect(second.state.unsupported).toBe(false);
+    expect(second.state.queryUnderstanding?.category).toBe("baby_food");
+    expect(
+      second.state.queryUnderstanding?.statedConditions.some((c) => c.key === "allergy"),
+    ).toBe(true);
   });
 
   it("AC-06 小样本：不出比例、全站结论优先、原话仍可见", async () => {

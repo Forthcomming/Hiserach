@@ -8,10 +8,11 @@ import {
 } from "./nodes";
 
 /**
- * Agent 状态图（规格 4.2）。节点顺序与降级分支显式可追踪：
+ * Agent 状态图（规格 4.2 + 对话顺畅 Continuity）。
  *
- * START → understand_query → load_memory → decide_followup
- *   ├─ 缺核心条件/超范围 → build_global_answer → persist_trace → END
+ * START → assemble_session_context → understand_query → load_memory → decide_followup
+ *   ├─ 超范围 → build_general_answer → persist_trace → END
+ *   ├─ 缺核心条件 → build_global_answer → persist_trace → END
  *   └─ 条件充足 → run_tools → compose_answer → validate_answer
  *        ├─ 通过 → persist_memory → persist_trace → END
  *        └─ 失败 → 重试一次 ├ 通过 → persist_memory → persist_trace → END
@@ -24,24 +25,29 @@ export function buildAgentGraph(ctx: GraphContext) {
   const nodes = makeNodes(ctx);
 
   return new StateGraph(AgentAnnotation)
+    .addNode("assemble_session_context", nodes.assemble_session_context)
     .addNode("understand_query", nodes.understand_query)
     .addNode("load_memory", nodes.load_memory)
     .addNode("decide_followup", nodes.decide_followup)
     .addNode("build_global_answer", nodes.build_global_answer)
+    .addNode("build_general_answer", nodes.build_general_answer)
     .addNode("run_tools", nodes.run_tools)
     .addNode("compose_answer", nodes.compose_answer)
     .addNode("validate_answer", nodes.validate_answer)
     .addNode("render_template", nodes.render_template)
     .addNode("persist_memory", nodes.persist_memory)
     .addNode("persist_trace", nodes.persist_trace)
-    .addEdge(START, "understand_query")
+    .addEdge(START, "assemble_session_context")
+    .addEdge("assemble_session_context", "understand_query")
     .addEdge("understand_query", "load_memory")
     .addEdge("load_memory", "decide_followup")
     .addConditionalEdges("decide_followup", (state) => routeAfterFollowup(state.state), {
+      general: "build_general_answer",
       global: "build_global_answer",
       tools: "run_tools",
     })
     .addEdge("build_global_answer", "persist_trace")
+    .addEdge("build_general_answer", "persist_trace")
     .addEdge("run_tools", "compose_answer")
     .addEdge("compose_answer", "validate_answer")
     .addConditionalEdges("validate_answer", (state) => routeAfterValidation(state.state), {

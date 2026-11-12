@@ -7,8 +7,10 @@ import type {
   AnswerDraft,
   Category,
   QueryUnderstanding,
+  SessionContext,
   ToolBundle,
 } from "@/domain/types";
+import { sessionHintText } from "./sessionContext";
 
 /**
  * json_object 是非严格模式，模型常省略空数组字段。给这些字段兜底空数组，
@@ -37,15 +39,27 @@ const DraftSchema = z.object({
   alternativeProductIds: z.array(z.string()).default([]),
 });
 
+export interface GeneralAdviceDraft {
+  text: string;
+}
+
 export interface ModelGateway {
   readonly configured: boolean;
   /** 只能输出受控 QueryUnderstanding，不直接生成答案（规格 4.2）。 */
   understandQuery(args: {
     query: string;
     products: Array<{ id: string; category: Category; name: string }>;
+    sessionContext?: SessionContext;
   }): Promise<QueryUnderstanding | null>;
   /** 只产出文案与引用声明；任何数字/ID 都要被 validate_answer 逐项校验。 */
   composeAnswer(args: { bundle: ToolBundle; conditionsText: string }): Promise<AnswerDraft | null>;
+  /**
+   * 超范围话题的常识/选购建议。禁止输出同类人人数、比例、原话或虚构产品口碑统计。
+   */
+  composeGeneralAdvice(args: {
+    query: string;
+    sessionHint?: string;
+  }): Promise<GeneralAdviceDraft | null>;
 }
 
 /** 未配置模型 / 超时 / 格式错误 / 服务异常时统一返回 null，由节点走确定性兜底。 */
@@ -57,7 +71,14 @@ class NullModelGateway implements ModelGateway {
   async composeAnswer(): Promise<AnswerDraft | null> {
     return null;
   }
+  async composeGeneralAdvice(): Promise<GeneralAdviceDraft | null> {
+    return null;
+  }
 }
+
+const GeneralAdviceSchema = z.object({
+  text: z.string().min(1),
+});
 
 /**
  * DeepSeek 等 OpenAI 兼容服务只保证 response_format=json_object 的 JSON 输出，
@@ -167,15 +188,20 @@ class OpenAiCompatibleGateway implements ModelGateway {
   async understandQuery(args: {
     query: string;
     products: Array<{ id: string; category: Category; name: string }>;
+    sessionContext?: SessionContext;
   }): Promise<QueryUnderstanding | null> {
+    const hint = sessionHintText(args.sessionContext);
     const system = [
       "你是查询理解器，只输出受控 JSON，不生成任何答案或统计数字。",
       "规则：",
       "1. 只有能归一到以下两个目标查询的意图才判为 supported；其余一律 unsupported。",
       "2. 条件只抽取用户明确自述的本人情况，且必须命中当前品类的维度与合法取值；他人情况、否定不明确或词表外条件不要输出。",
       "3. productIds 只能取给定产品列表中的 ID。",
+      "4. 容忍错别字、口语、省略主语；能合理归一到词表取值时要归一（如「混油皮」→「混油」）。",
+      "5. 若提供了会话上下文，短追问（如「那混油皮呢」「替代那款呢」）应继承品类与 productIds，并抽取本轮新条件。",
       `词表与查询别名：\n${vocabularyText()}`,
       `产品列表：${JSON.stringify(args.products)}`,
+      hint ? `会话上下文：${hint}` : "会话上下文：无",
     ].join("\n");
 
     const raw = await this.call(UnderstandSchema, system, args.query);
@@ -217,6 +243,25 @@ class OpenAiCompatibleGateway implements ModelGateway {
     ].join("\n");
 
     return this.call(DraftSchema, system, prompt);
+  }
+
+  async composeGeneralAdvice(args: {
+    query: string;
+    sessionHint?: string;
+  }): Promise<GeneralAdviceDraft | null> {
+    const system = [
+      "你是消费选购助手，用简洁中文给出常识性建议。",
+      "硬性禁止：不得编造或声称任何「同类人」人数、推荐比例、用户原话、样本统计。",
+      "可以给通用选购要点；结尾不要假装有口碑数据。",
+      "输出 JSON：{ \"text\": \"建议正文\" }。",
+    ].join("\n");
+    const prompt = [
+      `用户问题：${args.query}`,
+      args.sessionHint ? `会话提示：${args.sessionHint}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return this.call(GeneralAdviceSchema, system, prompt);
   }
 }
 

@@ -14,6 +14,7 @@ import type {
   Persona,
   Product,
   Session,
+  SessionTurnSnapshot,
   TraceNode,
   TraceRow,
 } from "@/domain/types";
@@ -36,6 +37,7 @@ interface Store {
   users: Map<string, AnonymousUser>;
   sessions: Map<string, Session>;
   messages: MessageRow[];
+  turnSnapshots: Map<string, SessionTurnSnapshot>;
   memories: Map<string, MemoryItem>;
   memoryEvents: MemoryEvent[];
   traces: TraceRow[];
@@ -99,6 +101,7 @@ function emptyStore(fixturePath: string): Store {
     users: new Map(),
     sessions: new Map(),
     messages: [],
+    turnSnapshots: new Map(),
     memories: new Map(),
     memoryEvents: [],
     traces: [],
@@ -211,7 +214,10 @@ export function createMemoryRepository(fixturePath = serverEnv.seedFixturePath):
           .filter((s) => s.userId === userId)
           .map((s) => s.id),
       );
-      for (const id of sessionIds) store.sessions.delete(id);
+      for (const id of sessionIds) {
+        store.sessions.delete(id);
+        store.turnSnapshots.delete(id);
+      }
       store.messages = store.messages.filter((m) => !sessionIds.has(m.sessionId));
       const memoryIds = new Set(
         [...store.memories.values()].filter((m) => m.userId === userId).map((m) => m.id),
@@ -235,6 +241,15 @@ export function createMemoryRepository(fixturePath = serverEnv.seedFixturePath):
 
     async listMessages(sessionId) {
       return structuredClone(store.messages.filter((m) => m.sessionId === sessionId));
+    },
+
+    async getSessionTurnSnapshot(sessionId) {
+      const snap = store.turnSnapshots.get(sessionId);
+      return snap ? structuredClone(snap) : null;
+    },
+
+    async setSessionTurnSnapshot(sessionId, snapshot) {
+      store.turnSnapshots.set(sessionId, structuredClone(snapshot));
     },
 
     async listProducts(category) {

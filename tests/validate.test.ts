@@ -120,4 +120,44 @@ describe("答案一致性校验（规格 4.2 / AC-10）", () => {
     const wrongMode = { ...answer, mode: "global" as const };
     expect(validateAnswerPayload(wrongMode, bundle).errors).toContain("mode_mismatch");
   });
+
+  it("有条件但同类人 0 人时附上诚实空态 notice", async () => {
+    const repo = createMemoryRepository(FIXTURE);
+    const [products, records] = await Promise.all([
+      repo.listProducts("beauty"),
+      repo.listExperiences({ category: "beauty" }),
+    ]);
+    const bundle = runTools({
+      category: "beauty",
+      productIds: ["p_dw_foundation"],
+      conditions: [
+        {
+          key: "skin_issue",
+          label: "皮肤状况",
+          valueLabel: "痘痘肌",
+          value: "痘痘肌",
+          isCore: true,
+          source: "user_input",
+        },
+      ],
+      records,
+      products,
+    });
+    expect(bundle.similarSummary?.authorCount ?? 0).toBe(0);
+    const answer = assembleAnswer({
+      bundle,
+      category: "beauty",
+      turnId: "t1",
+      appliedConditions: [
+        {
+          key: "skin_issue",
+          label: "皮肤状况",
+          valueLabel: "痘痘肌",
+          source: "user_input",
+        },
+      ],
+    });
+    expect(answer.mode).toBe("global");
+    expect(answer.notice?.text).toContain("暂时没有和你情况相似的人的反馈");
+  });
 });

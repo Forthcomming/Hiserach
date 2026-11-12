@@ -180,17 +180,9 @@ export const Icon = ({
   );
 };
 
+/** 真机上状态栏由系统/浏览器提供，网页内不再渲染假状态栏（保留导出以免改动各页面结构）。 */
 export function StatusBar() {
-  return (
-    <div className="statusbar">
-      <b>19:26</b>
-      <div className="status-icons">
-        <span className="signal">▮▮▮▮</span>
-        <b>5G</b>
-        <span className="battery">92</span>
-      </div>
-    </div>
-  );
+  return null;
 }
 
 export function DotsLogo({ small = false }: { small?: boolean }) {

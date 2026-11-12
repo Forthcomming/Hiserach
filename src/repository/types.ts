@@ -10,6 +10,7 @@ import type {
   Persona,
   Product,
   Session,
+  SessionTurnSnapshot,
   TraceNode,
   TraceRow,
 } from "@/domain/types";
@@ -56,6 +57,9 @@ export interface Repository {
   // ── 对话 ──────────────────────────────────────────────────────────────
   appendMessage(message: MessageRow): Promise<void>;
   listMessages(sessionId: string): Promise<MessageRow[]>;
+  /** 最近一轮可恢复摘要，供多轮 Continuity；无则 null。 */
+  getSessionTurnSnapshot(sessionId: string): Promise<SessionTurnSnapshot | null>;
+  setSessionTurnSnapshot(sessionId: string, snapshot: SessionTurnSnapshot): Promise<void>;
 
   // ── 经验数据（只读，离线管线入库） ─────────────────────────────────────
   listProducts(category?: Category): Promise<Product[]>;

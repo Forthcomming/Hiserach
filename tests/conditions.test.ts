@@ -162,3 +162,32 @@ describe("条件校验与合并优先级", () => {
     expect(merged.conditions).toEqual([]);
   });
 });
+
+describe("口语别名与会话 Continuity 理解", () => {
+  it("混油皮归一为混油", () => {
+    const u = understandQueryDeterministic({ query: "DW粉底，我是混油皮" });
+    expect(u.intent).toBe("supported");
+    expect(u.statedConditions.some((c) => c.key === "skin_type" && c.value === "混油")).toBe(
+      true,
+    );
+  });
+
+  it("有会话 Context 时短追问继承品类与产品", () => {
+    const u = understandQueryDeterministic({
+      query: "那混油皮呢",
+      sessionContext: {
+        category: "beauty",
+        productIds: ["p_dw_foundation"],
+        conditionSummary: [],
+        lastTurnId: "t_prev",
+        recentTurnSummaries: [],
+      },
+    });
+    expect(u.intent).toBe("supported");
+    expect(u.category).toBe("beauty");
+    expect(u.productIds).toEqual(["p_dw_foundation"]);
+    expect(u.statedConditions.some((c) => c.key === "skin_type" && c.value === "混油")).toBe(
+      true,
+    );
+  });
+});

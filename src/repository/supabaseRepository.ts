@@ -13,12 +13,16 @@ import type {
   Persona,
   Product,
   Session,
+  SessionTurnSnapshot,
   TraceNode,
   TraceRow,
 } from "@/domain/types";
 import type { MemoryWritePlan, MemoryWriteResult, Repository } from "./types";
 
 type Row = Record<string, unknown>;
+
+/** 进程内兜底：迁移未上线或列缺失时仍可 Continuity（同进程内）。 */
+const turnSnapshotFallback = new Map<string, SessionTurnSnapshot>();
 
 let client: SupabaseClient | null = null;
 function db(): SupabaseClient {
@@ -207,6 +211,7 @@ export function createSupabaseRepository(): Repository {
         await db().from("sessions").select("id").eq("user_id", userId),
       ) as Row[];
       const sessionIds = sessions.map((s) => String(s.id));
+      for (const id of sessionIds) turnSnapshotFallback.delete(id);
       const turns = unwrap(
         await db().from("messages").select("turn_id").in("session_id", sessionIds),
       ) as Row[];
@@ -233,6 +238,37 @@ export function createSupabaseRepository(): Repository {
           created_at: message.createdAt,
         }),
       );
+    },
+
+    async getSessionTurnSnapshot(sessionId) {
+      try {
+        const { data, error } = await db()
+          .from("sessions")
+          .select("turn_snapshot")
+          .eq("id", sessionId)
+          .maybeSingle();
+        if (error) throw error;
+        const raw = (data as Row | null)?.turn_snapshot;
+        if (raw && typeof raw === "object") {
+          return structuredClone(raw as SessionTurnSnapshot);
+        }
+      } catch {
+        // 列未迁移时走进程内兜底
+      }
+      const local = turnSnapshotFallback.get(sessionId);
+      return local ? structuredClone(local) : null;
+    },
+
+    async setSessionTurnSnapshot(sessionId, snapshot) {
+      turnSnapshotFallback.set(sessionId, structuredClone(snapshot));
+      try {
+        await db()
+          .from("sessions")
+          .update({ turn_snapshot: snapshot })
+          .eq("id", sessionId);
+      } catch {
+        // 列未迁移时仅保留进程内快照
+      }
     },
 
     async listMessages(sessionId) {

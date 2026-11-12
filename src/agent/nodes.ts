@@ -16,9 +16,20 @@ import type { Repository } from "@/repository/types";
 import { runTools } from "@/tools/runTools";
 import { decideMemoryPlan, memoryChangeSummary } from "@/memory/decide";
 import type { ModelGateway } from "./model";
+import {
+  assembleContextPacket,
+  loadSessionContext,
+  sessionHintText,
+  snapshotFromState,
+} from "./sessionContext";
 import { productVocabulary, understandQueryDeterministic } from "./understand";
 import { assembleAnswer, validateAnswerDraft, validateAnswerPayload } from "./validate";
-import { renderTemplateAnswer, templateHeadline, unsupportedAnswer } from "./template";
+import {
+  fallbackGeneralAdvice,
+  generalAdviceAnswer,
+  renderTemplateAnswer,
+  templateHeadline,
+} from "./template";
 import { recordNode, safeSummary, type AgentContext } from "./trace";
 import type { GraphState } from "./state";
 
@@ -117,6 +128,25 @@ export function makeNodes(ctx: GraphContext) {
   };
 
   return {
+    /** ⓪ 组装会话 Context（最小最近 1 轮；二期组装器入口预留）。 */
+    assemble_session_context: node(
+      "assemble_session_context",
+      async (s) => {
+        const sessionContext = await loadSessionContext(ctx.repo, s.sessionId);
+        assembleContextPacket({ sessionContext });
+        return { sessionContext };
+      },
+      {
+        statusOf: (_s, patch) =>
+          patch.sessionContext?.lastTurnId ? "success" : "skipped",
+        summaryOf: (_s, patch) => ({
+          output: `lastTurn=${patch.sessionContext?.lastTurnId ?? "-"}; category=${
+            patch.sessionContext?.category ?? "-"
+          }; products=${patch.sessionContext?.productIds.length ?? 0}`,
+        }),
+      },
+    ),
+
     /** ① 只输出受控 QueryUnderstanding，不生成答案。 */
     understand_query: node(
       "understand_query",
@@ -125,6 +155,7 @@ export function makeNodes(ctx: GraphContext) {
         const deterministic = understandQueryDeterministic({
           query: s.query,
           followupSelection: s.followupSelection,
+          sessionContext: s.sessionContext,
         });
         let understanding: QueryUnderstanding | null = null;
         // 追问选项来自受控 UI，品类与候选商品由规则确定，不再让模型二次猜测。
@@ -134,6 +165,7 @@ export function makeNodes(ctx: GraphContext) {
           understanding = await ctx.model.understandQuery({
             query: s.query,
             products: productVocabulary(products),
+            sessionContext: s.sessionContext,
           });
         }
         if (!understanding ||
@@ -146,6 +178,17 @@ export function makeNodes(ctx: GraphContext) {
           // 受控词表命中时，候选商品集合以配置为准；模型只补充自然语言条件。
           understanding.category = deterministic.category;
           understanding.productIds = deterministic.productIds;
+        } else if (
+          understanding.intent === "supported" &&
+          deterministic.intent === "unsupported" &&
+          s.sessionContext?.category &&
+          (!understanding.productIds.length || !understanding.category)
+        ) {
+          // 模型判 supported 但缺品类/产品时，用会话 Continuity 补齐
+          understanding.category = understanding.category ?? s.sessionContext.category;
+          if (!understanding.productIds.length) {
+            understanding.productIds = [...s.sessionContext.productIds];
+          }
         }
 
         // 规则校验优先于模型建议：模型不能突破品类词表、产品 ID 或条件来源限制
@@ -224,15 +267,10 @@ export function makeNodes(ctx: GraphContext) {
       },
     ),
 
-    /** 缺核心条件 / 超范围：全站答案 + 追问卡片，或受限提示。 */
+    /** 缺核心条件：全站答案 + 追问卡片（可附同类人空态 notice）。 */
     build_global_answer: node(
       "build_global_answer",
       async (s) => {
-        if (s.unsupported) {
-          const answer = unsupportedAnswer({ turnId: s.turnId });
-          emitDelta(ctx, answer.notice!.text);
-          return { answer };
-        }
         const bundle = await computeBundle(ctx, s);
         const answer = assembleAnswer({
           bundle,
@@ -245,9 +283,39 @@ export function makeNodes(ctx: GraphContext) {
       },
       {
         summaryOf: (_s, patch) => ({
-          output: patch.answer?.notice
-            ? "unsupported_notice"
-            : `mode=${patch.answer?.mode}; global_authors=${patch.answer?.globalSummary.authorCount}`,
+          output: `mode=${patch.answer?.mode}; global_authors=${
+            patch.answer?.globalSummary.authorCount
+          }; notice=${patch.answer?.notice ? "yes" : "no"}`,
+        }),
+      },
+    ),
+
+    /** 超范围：模型常识建议 + 诚实声明无同类人数据；不跑统计工具。 */
+    build_general_answer: node(
+      "build_general_answer",
+      async (s) => {
+        const draft = ctx.model.configured
+          ? await ctx.model.composeGeneralAdvice({
+              query: s.query,
+              sessionHint: sessionHintText(s.sessionContext) || undefined,
+            })
+          : null;
+        const adviceText = draft?.text?.trim() || fallbackGeneralAdvice(s.query);
+        const answer = generalAdviceAnswer({
+          turnId: s.turnId,
+          adviceText,
+          category: s.sessionContext?.category,
+        });
+        emitDelta(ctx, adviceText.slice(0, 80));
+        return {
+          answer,
+          degraded: !draft,
+          ...(draft ? {} : { fallbackReason: "model_unconfigured" as const }),
+        };
+      },
+      {
+        summaryOf: (_s, patch) => ({
+          output: `mode=general; advice_len=${patch.answer?.adviceText?.length ?? 0}`,
         }),
       },
     ),
@@ -451,10 +519,14 @@ export function makeNodes(ctx: GraphContext) {
         turnId: s.turnId,
         role: "assistant",
         content:
+          s.answer?.adviceText ??
           s.answer?.notice?.text ??
-          (s.toolResult ? templateHeadline(s.toolResult) : "Demo 目前只覆盖以下查询"),
+          (s.toolResult ? templateHeadline(s.toolResult) : "暂无答案摘要"),
         createdAt: nowIso(),
       });
+
+      const snap = snapshotFromState(s);
+      if (snap) await ctx.repo.setSessionTurnSnapshot(s.sessionId, snap);
 
       const t = recordNode(
         ctx,
@@ -470,9 +542,9 @@ export function makeNodes(ctx: GraphContext) {
   };
 }
 
-/** 条件边：是否进入工具链路。 */
-export function routeAfterFollowup(s: AgentState): "global" | "tools" {
-  if (s.unsupported) return "global";
+/** 条件边：超范围 → 通用答；缺核心 → 全站；否则工具链路。 */
+export function routeAfterFollowup(s: AgentState): "general" | "global" | "tools" {
+  if (s.unsupported) return "general";
   return s.workingConditions.some((c) => c.isCore) ? "tools" : "global";
 }
 

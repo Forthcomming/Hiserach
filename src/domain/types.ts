@@ -19,7 +19,7 @@ export type MemoryAction =
   | "enabled_for_session"
   | "deleted"
   | "undo";
-export type AnswerMode = "global" | "similar" | "small_sample";
+export type AnswerMode = "global" | "similar" | "small_sample" | "general";
 export type TraceStatus = "success" | "failed" | "degraded" | "skipped";
 export type FallbackReason =
   | "model_timeout"
@@ -142,6 +142,28 @@ export interface Session {
   createdAt: string;
 }
 
+/** 会话最近一轮可恢复摘要（最小 Continuity；二期可扩 recent 6 轮）。 */
+export interface SessionTurnSnapshot {
+  turnId: string;
+  query: string;
+  intent: "supported" | "unsupported";
+  category?: Category;
+  productIds: string[];
+  conditions: Array<{ key: string; value: string }>;
+}
+
+/**
+ * 交给理解器的会话 Context（二期组装器入口形态；本轮只填最近 1 轮）。
+ * recentTurnSummaries 预留，当前可空或仅 1 条。
+ */
+export interface SessionContext {
+  category?: Category;
+  productIds: string[];
+  conditionSummary: Array<{ key: string; value: string }>;
+  lastTurnId?: string;
+  recentTurnSummaries: Array<{ turnId: string; query: string; intent: string }>;
+}
+
 export interface MessageRow {
   id: string;
   sessionId: string;
@@ -253,8 +275,13 @@ export interface AnswerPayload {
   products: ProductAnswer[];
   alternatives: ProductAnswer[];
   followup?: FollowupCard;
-  /** 超范围查询的受限提示与两个可点击快捷标签（规格 7.3）。 */
-  notice?: { text: string; quickTags: string[] };
+  /**
+   * 提示条：超范围通用答 / 同类人 0 人空态等。
+   * quickTags 可选；有则展示可点击引导。
+   */
+  notice?: { text: string; quickTags?: string[] };
+  /** mode=general 时的常识/选购建议正文；不得含同类人数字或原话。 */
+  adviceText?: string;
   disclaimers: string[];
   datasetNote: string;
   traceId: string;
@@ -308,6 +335,8 @@ export interface AgentState {
   sessionId: string;
   query: string;
   followupSelection?: Array<{ key: string; value: string }>;
+  /** 本轮组装的会话 Context；由 assemble_session_context 写入。 */
+  sessionContext?: SessionContext;
   queryUnderstanding?: QueryUnderstanding;
   memoryDisabledForSession: boolean;
   loadedMemories: MemoryItem[];

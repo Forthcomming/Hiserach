@@ -6,6 +6,7 @@ import type {
   ToolBundle,
 } from "@/domain/types";
 import { modeOf } from "@/tools/runTools";
+import { NO_PEER_DATA_NOTICE } from "./notices";
 import { assembleAnswer } from "./validate";
 
 /**
@@ -34,13 +35,16 @@ export function renderTemplateAnswer(args: {
   return assembleAnswer(args);
 }
 
-/** 超范围查询：不跑统计工具、不写记忆，只返回受限提示与两个快捷标签。 */
-export function unsupportedAnswer(args: {
+const DEMO_QUICK_TAGS = ["DW粉底", "婴儿米粉推荐"];
+
+/** 超范围通用答：无工具统计、无原话；可附快捷标签引导回 Demo 查询。 */
+export function generalAdviceAnswer(args: {
   turnId: string;
+  adviceText: string;
   category?: Category;
 }): AnswerPayload {
   return {
-    mode: "global",
+    mode: "general",
     appliedConditions: [],
     globalSummary: {
       authorCount: 0,
@@ -50,15 +54,21 @@ export function unsupportedAnswer(args: {
     },
     products: [],
     alternatives: [],
+    adviceText: args.adviceText,
     notice: {
-      text: "Demo 目前只覆盖以下查询",
-      quickTags: ["DW粉底", "婴儿米粉推荐"],
+      text: NO_PEER_DATA_NOTICE,
+      quickTags: DEMO_QUICK_TAGS,
     },
     disclaimers: [
-      "内容仅用于面试演示，基于本次收集的样本，非医疗建议",
+      "内容仅用于面试演示，基于常识建议，非医疗建议，未使用同类人样本数据",
       ...(args.category ? [getCategoryConfig(args.category).medicalDisclaimer] : []),
     ],
     datasetNote: "本次未使用样本数据",
     traceId: args.turnId,
   };
+}
+
+/** 模型失败时的通用答模板。 */
+export function fallbackGeneralAdvice(query: string): string {
+  return `关于「${query.slice(0, 40)}」，我可以先给一些通用选购思路，但当前没有可对齐的同类人样本，无法提供口碑比例或原话。你可以试试 Demo 已覆盖的「DW粉底」或「婴儿米粉推荐」。`;
 }

@@ -128,6 +128,12 @@ export function canonicalEnumValue(
     拉肚子: "有腹泻",
     脂溢性皮炎: "脂溢性皮炎",
     油性皮肤: "油皮",
+    混油皮: "混油",
+    混合偏油: "混油",
+    混干皮: "混干",
+    混合偏干: "混干",
+    干性皮肤: "干皮",
+    中性皮肤: "中性",
   };
   const hit = Object.entries(aliases).find(([alias]) => raw.includes(alias));
   if (!hit) return null;
