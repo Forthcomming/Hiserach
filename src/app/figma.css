@@ -567,12 +567,6 @@ button {
   justify-content: space-between;
   gap: 10px;
 }
-.foundation-details-head > div > span {
-  display: block;
-  margin-bottom: 3px;
-  color: #98989a;
-  font-size: 9px;
-}
 .foundation-details-head h3 {
   margin: 0;
   font-size: 14px;
@@ -587,16 +581,11 @@ button {
   line-height: 1.4;
   text-align: right;
 }
-.foundation-description {
-  margin: 10px 0;
-  color: #666668;
-  font-size: 11px;
-  line-height: 1.65;
-}
 .foundation-features {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 10px;
   padding-bottom: 14px;
   border-bottom: 1px solid #ececec;
 }
@@ -616,9 +605,43 @@ button {
 .shade-heading b {
   font-size: 12px;
 }
-.shade-heading span {
-  color: #777779;
+.shade-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.shade-info {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: #999;
+  border-radius: 50%;
+}
+.shade-info::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 4;
+  left: -10px;
+  bottom: calc(100% + 7px);
+  width: 205px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(35, 35, 37, 0.94);
   font-size: 9px;
+  line-height: 1.5;
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s, transform 0.15s;
+}
+.shade-info:hover::after,
+.shade-info:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 .shade-options {
   display: grid;
@@ -666,19 +689,41 @@ button {
   color: #929294;
   font-size: 8px;
 }
-.shade-selection {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 10px 0 0;
-  color: #278e7d;
+.shade-profile {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  column-gap: 9px;
+  margin-top: 11px;
+  padding: 10px;
+  border-radius: 11px;
+  background: #f1f1f1;
+}
+.shade-profile > i {
+  grid-row: 1 / span 2;
+  width: 30px;
+  height: 30px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.shade-profile b,
+.shade-profile span {
+  display: block;
+}
+.shade-profile b {
+  font-size: 11px;
+}
+.shade-profile span {
+  margin-top: 2px;
+  color: #777779;
   font-size: 9px;
 }
-.shade-note {
-  margin: 6px 0 0;
-  color: #aaa;
-  font-size: 8px;
-  line-height: 1.5;
+.shade-profile p {
+  grid-column: 1 / -1;
+  margin: 8px 0 0;
+  color: #626264;
+  font-size: 9.5px;
+  line-height: 1.55;
 }
 .dw-product-gallery {
   margin-bottom: 12px;

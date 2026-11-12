@@ -154,10 +154,38 @@ function recommendationText(product: ProductAnswer, mode: AnswerPayload["mode"])
 }
 
 const foundationShades = [
-  { id: "1C0", name: "贝壳白", tone: "冷调", color: "#f4d3bc" },
-  { id: "1W1", name: "暖象牙", tone: "暖调", color: "#eac09d" },
-  { id: "1N1", name: "象牙裸", tone: "中性调", color: "#e6b895" },
-  { id: "2W0", name: "暖香草", tone: "暖调", color: "#dca77d" },
+  {
+    id: "1C0",
+    name: "贝壳白",
+    tone: "冷调",
+    fit: "白皙肤色",
+    detail: "偏粉底色，适合希望自然提亮、减少暗黄感的妆面。",
+    color: "#f4d3bc",
+  },
+  {
+    id: "1W1",
+    name: "暖象牙",
+    tone: "暖调",
+    fit: "白皙肤色",
+    detail: "偏黄底色，适合肤色较白、整体偏暖的人群。",
+    color: "#eac09d",
+  },
+  {
+    id: "1N1",
+    name: "象牙裸",
+    tone: "中性调",
+    fit: "白皙至自然",
+    detail: "综合色调，不明显偏粉或偏黄，日常妆感更自然。",
+    color: "#e6b895",
+  },
+  {
+    id: "2W0",
+    name: "暖香草",
+    tone: "暖调",
+    fit: "自然肤色",
+    detail: "色调更暖，适合自然偏黄肤色，减少假白感。",
+    color: "#dca77d",
+  },
 ] as const;
 
 function FoundationProductDetails({
@@ -174,23 +202,26 @@ function FoundationProductDetails({
   return (
     <section className="foundation-details" aria-label={`${productName}商品信息与色号选择`}>
       <div className="foundation-details-head">
-        <div>
-          <span>商品介绍</span>
-          <h3>{productName} 持妆粉底液</h3>
-        </div>
+        <h3>{productName} 持妆粉底液</h3>
         <em>{recommendation}</em>
       </div>
-      <p className="foundation-description">
-        中高遮瑕的半哑光妆效，适合希望长时间保持底妆完整的人群；偏干肤质建议先做好保湿打底。
-      </p>
       <div className="foundation-features" aria-label="商品特点">
         <span>中高遮瑕</span>
         <span>半哑光</span>
         <span>长效持妆</span>
       </div>
       <div className="shade-heading">
-        <b>选择色号</b>
-        <span>{selectedShade.id} · {selectedShade.name}</span>
+        <div>
+          <b>选择色号</b>
+          <button
+            type="button"
+            className="shade-info"
+            aria-label="色号说明：页面色号为交互示例，实际购买请以官方在售色号和试色结果为准"
+            data-tooltip="页面色号为交互示例，实际购买请以官方在售色号和试色结果为准。"
+          >
+            <Icon name="info" size={14} />
+          </button>
+        </div>
       </div>
       <div className="shade-options" role="group" aria-label="选择粉底色号">
         {foundationShades.map((shade) => (
@@ -208,11 +239,14 @@ function FoundationProductDetails({
           </button>
         ))}
       </div>
-      <p className="shade-selection">
-        <Icon name="check" size={14} />
-        已选择 {selectedShade.id} {selectedShade.name}（{selectedShade.tone}）
-      </p>
-      <p className="shade-note">色号为交互示例，实际购买请以官方在售色号和试色结果为准。</p>
+      <div className="shade-profile" aria-live="polite">
+        <i style={{ background: selectedShade.color }} />
+        <div>
+          <b>{selectedShade.id} {selectedShade.name}</b>
+          <span>{selectedShade.tone} · {selectedShade.fit}</span>
+        </div>
+        <p>{selectedShade.detail}</p>
+      </div>
     </section>
   );
 }

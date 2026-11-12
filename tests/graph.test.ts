@@ -45,6 +45,20 @@ class GoodGateway implements ModelGateway {
   }
 }
 
+class FastPathGateway extends GoodGateway {
+  readonly deterministicFastPath = true;
+  understandCalls = 0;
+  composeCalls = 0;
+  override async understandQuery() {
+    this.understandCalls += 1;
+    return null;
+  }
+  override async composeAnswer({ bundle }: { bundle: ToolBundle }) {
+    this.composeCalls += 1;
+    return draftFrom(bundle);
+  }
+}
+
 class FollowupMisclassifyingGateway implements ModelGateway {
   readonly configured = true;
   async understandQuery() {
@@ -135,6 +149,20 @@ const nodeNames = (events: StreamEvent[]) =>
   events.filter((e) => e.type === "node.status").map((e) => (e as { node: string }).node);
 
 describe("Agent 状态图端到端链路", () => {
+  it("已知商品查询走确定性极速路径，不等待模型理解或润色", async () => {
+    const model = new FastPathGateway();
+    const { state } = await run({
+      persona: "xiaolin",
+      query: "DW粉底",
+      model,
+    });
+
+    expect(model.understandCalls).toBe(0);
+    expect(model.composeCalls).toBe(0);
+    expect(state.answer?.mode).toBe("similar");
+    expect(state.answer?.similarSummary?.authorCount).toBe(6);
+  });
+
   it("AC-03 小林有记忆标准路径：同类人答案、替代品、追踪完整", async () => {
     const { state, events, repo } = await run({
       persona: "xiaolin",

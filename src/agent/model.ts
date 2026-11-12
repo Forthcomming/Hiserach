@@ -45,6 +45,8 @@ export interface GeneralAdviceDraft {
 
 export interface ModelGateway {
   readonly configured: boolean;
+  /** 已知商品查询可直接使用工具结果组装答案，不等待模型润色。 */
+  readonly deterministicFastPath?: boolean;
   /** 只能输出受控 QueryUnderstanding，不直接生成答案（规格 4.2）。 */
   understandQuery(args: {
     query: string;
@@ -65,6 +67,7 @@ export interface ModelGateway {
 /** 未配置模型 / 超时 / 格式错误 / 服务异常时统一返回 null，由节点走确定性兜底。 */
 class NullModelGateway implements ModelGateway {
   readonly configured = false;
+  readonly deterministicFastPath = true;
   async understandQuery(): Promise<QueryUnderstanding | null> {
     return null;
   }
@@ -127,6 +130,7 @@ function vocabularyText(): string {
 
 class OpenAiCompatibleGateway implements ModelGateway {
   readonly configured = true;
+  readonly deterministicFastPath = true;
 
   private async call<T>(
     schema: z.ZodType<T>,

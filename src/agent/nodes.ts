@@ -2,6 +2,7 @@ import { findDimension } from "@/domain/categories";
 import { mergeWorkingConditions, validateConditionInput } from "@/domain/conditions";
 import type {
   AgentState,
+  AnswerDraft,
   AppliedCondition,
   Category,
   QueryUnderstanding,
@@ -53,6 +54,21 @@ function finish(
 ): NodeResult {
   const t = recordNode(ctx, node, status, Date.now() - started, input, output);
   return { state: { ...s, ...patch, trace: [...s.trace, t] } };
+}
+
+/** 已知商品查询的确定性草稿：全部字段直接抄自工具结果，不调用模型。 */
+function deterministicDraft(bundle: ToolBundle): AnswerDraft {
+  const similar = bundle.similarSummary;
+  return {
+    headline: templateHeadline(bundle),
+    ...(similar ? { similarAuthorCount: similar.authorCount } : {}),
+    ...(similar?.recommendRate !== undefined
+      ? { similarRecommendRate: similar.recommendRate }
+      : {}),
+    quoteIds: bundle.quotes.map((quote) => quote.id),
+    reasonIds: bundle.reasons.map((reason) => reason.reasonId),
+    alternativeProductIds: bundle.alternatives.map((product) => product.productId),
+  };
 }
 
 function appliedConditionsOf(s: AgentState): AppliedCondition[] {
@@ -158,8 +174,8 @@ export function makeNodes(ctx: GraphContext) {
           sessionContext: s.sessionContext,
         });
         let understanding: QueryUnderstanding | null = null;
-        // 追问选项来自受控 UI，品类与候选商品由规则确定，不再让模型二次猜测。
-        if (s.followupSelection?.length) {
+        // 受控选项或词表已明确命中时直接采用规则结果，不再等待模型二次理解。
+        if (s.followupSelection?.length || deterministic.intent === "supported") {
           understanding = deterministic;
         } else if (ctx.model.configured) {
           understanding = await ctx.model.understandQuery({
@@ -343,6 +359,19 @@ export function makeNodes(ctx: GraphContext) {
       "compose_answer",
       async (s) => {
         const bundle = s.toolResult!;
+        const deterministic = understandQueryDeterministic({
+          query: s.query,
+          followupSelection: s.followupSelection,
+          sessionContext: s.sessionContext,
+        });
+        if (
+          ctx.model.deterministicFastPath &&
+          deterministic.intent === "supported"
+        ) {
+          const draft = deterministicDraft(bundle);
+          emitDelta(ctx, draft.headline);
+          return { answerDraft: draft, composeFailed: false };
+        }
         const conditionsText = s.workingConditions
           .map((c) => `${c.label}=${c.valueLabel}`)
           .join("、");
