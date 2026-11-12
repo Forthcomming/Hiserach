@@ -98,6 +98,20 @@ class OpenAiCompatibleGateway implements ModelGateway {
     const provider = createOpenAI({
       apiKey: serverEnv.llmApiKey,
       ...(serverEnv.llmBaseUrl ? { baseURL: serverEnv.llmBaseUrl } : {}),
+      // DeepSeek 只支持 response_format=json_object；AI SDK 的 generateObject 会走严格
+      // json_schema，因此改用 generateText，并在请求发出前强制写入 json_object。
+      fetch: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        if (init?.body && typeof init.body === "string") {
+          try {
+            const body = JSON.parse(init.body);
+            body.response_format = { type: "json_object" };
+            return fetch(input, { ...init, body: JSON.stringify(body) });
+          } catch {
+            // 非 JSON 请求体，原样发出
+          }
+        }
+        return fetch(input, init);
+      },
     });
     const model = provider.chat(
       serverEnv.llmModel as Parameters<typeof provider.chat>[0],
@@ -111,9 +125,6 @@ class OpenAiCompatibleGateway implements ModelGateway {
       model,
       system: `${system}\n只输出一个 JSON 对象，不要解释、不要 markdown 代码块。`,
       prompt,
-      providerOptions: {
-        openai: { responseFormat: { type: "json_object" } },
-      },
     })
       .then((r) => parseStructured<T>(r.text, schema))
       .catch(() => null);
