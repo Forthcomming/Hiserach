@@ -1052,6 +1052,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingText, setPendingText] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ text: string; undoToken?: string } | null>(null);
   const [conditionAnswer, setConditionAnswer] = useState<AnswerPayload | null>(null);
   const [quote, setQuote] = useState<QuoteTarget | null>(null);
@@ -1072,8 +1073,10 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
     }
   }, [notice]);
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [turns]);
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [turns, busy, pendingText]);
   function save(next: Partial<Record<Persona, SessionInfo>>) {
     setSessions(next);
     localStorage.setItem(storageKey, JSON.stringify(next));
@@ -1102,6 +1105,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
       }
       setIdentity(persona);
       setTurns([]);
+      setPendingText(null);
       setMemoryDisabled(false);
       setScreen("chat");
       setNotice(null);
@@ -1123,6 +1127,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
     save({ ...latest, [persona]: { ...current, sessionId: data.sessionId } });
     if (persona === identity) {
       setTurns([]);
+      setPendingText(null);
       setMemoryDisabled(false);
     }
   }
@@ -1135,6 +1140,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
     setBusy(true);
     setDraft("");
     const shown = selection ? selection.map((item) => item.value).join("、") : message.trim();
+    if (!replaceLast) setPendingText(shown);
     try {
       const requestChat = async (sessionId: string) => {
         const response = await fetch("/api/chat", {
@@ -1203,6 +1209,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
         }
       }
       if (!answer) throw new Error("没有收到答案，请重试");
+      setPendingText(null);
       setTurns((prev) => {
         const next = recoveredSession ? [] : replaceLast ? prev.slice(0, -1) : prev;
         return [
@@ -1219,6 +1226,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
       });
       if (recoveredSession) setNotice({ text: "会话已自动恢复，并重新生成了答案" });
     } catch (cause) {
+      setPendingText(null);
       setNotice({ text: cause instanceof Error ? cause.message : "搜索失败" });
     } finally {
       setBusy(false);
@@ -1328,6 +1336,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
                 />
               </div>
             ))}
+            {pendingText && <div className="user-bubble">{pendingText}</div>}
             {busy && (
               <div className="figma-thinking">
                 <DotsLogo small />
