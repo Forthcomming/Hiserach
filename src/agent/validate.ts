@@ -88,7 +88,7 @@ export function assembleAnswer(args: {
     appliedConditions: args.appliedConditions,
     ...(similar ? { similarSummary: similar } : {}),
     globalSummary: bundle.globalSummary,
-    products: bundle.primaryProduct ? [bundle.primaryProduct] : [],
+    products: bundle.rankedProducts ?? (bundle.primaryProduct ? [bundle.primaryProduct] : []),
     alternatives: bundle.alternatives,
     ...(bundle.followup ? { followup: bundle.followup } : {}),
     ...(args.notice ? { notice: args.notice } : {}),

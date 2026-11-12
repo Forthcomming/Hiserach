@@ -991,22 +991,30 @@ button {
 }
 .ranking > div {
   display: grid;
-  grid-template-columns: 18px 45px 1fr auto;
+  grid-template-columns: 18px 54px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  column-gap: 10px;
   min-height: 56px;
+}
+.ranking > div + div {
+  border-top: 1px solid #ededed;
+  margin-top: 8px;
+  padding-top: 8px;
 }
 .ranking > div > span {
   color: #888;
   font-size: 13px;
 }
 .ranking b {
+  min-width: 0;
   font-size: 13px;
+  line-height: 1.35;
 }
 .ranking em {
   font-size: 10px;
   color: #999;
   font-style: normal;
+  white-space: nowrap;
 }
 .mini-product {
   border-top: 1px solid #eee;

@@ -100,6 +100,17 @@ function valueOf(memory: MemoryRecord) {
 function percent(rate: number) {
   return `${Math.round(rate * 100)}%`;
 }
+function riceVisual(productId: string): "rice" | "engnice" {
+  return productId === "p_rice_02" ? "engnice" : "rice";
+}
+function recommendationText(product: ProductAnswer, mode: AnswerPayload["mode"]) {
+  const similar = product.similarSummary;
+  if (mode === "similar" && similar?.recommendRate !== undefined) {
+    return `${percent(similar.recommendRate)} 人推荐`;
+  }
+  if (mode === "small_sample" && similar) return `${similar.recommendCount} 人推荐`;
+  return `${percent(product.globalSummary?.recommendRate ?? 0)} 人推荐`;
+}
 function quoteTarget(
   product: ProductAnswer,
   title: string,
@@ -320,15 +331,17 @@ function DynamicAnswer({
               参考 {answer.globalSummary.authorCount} 位作者经验
             </div>
             <p className="answer-lead">
-              给宝宝选第一口米粉，配料干净和高铁好消化是关键，先看看这款的整体反馈：
+              给宝宝选第一口米粉，配料干净和高铁好消化是关键，先看看这些商品的整体反馈：
             </p>
             <section className="ranking">
-              <div>
-                <span>1</span>
-                <ProductVisual kind="rice" compact />
-                <b>{product.name}</b>
-                <em>{percent(answer.globalSummary.recommendRate)} 人推荐</em>
-              </div>
+              {answer.products.map((item, index) => (
+                <div key={item.productId}>
+                  <span>{index + 1}</span>
+                  <ProductVisual kind={riceVisual(item.productId)} compact />
+                  <b>{item.name}</b>
+                  <em>{recommendationText(item, answer.mode)}</em>
+                </div>
+              ))}
             </section>
             <section className="mini-product">
               <div>
@@ -343,6 +356,18 @@ function DynamicAnswer({
         ) : (
           <>
             {rice && <p className="answer-lead">结合你家宝宝的情况，结论和全站反馈可能不一样：</p>}
+            {rice && answer.products.length > 1 && (
+              <section className="ranking personalized-ranking">
+                {answer.products.map((item, index) => (
+                  <div key={item.productId}>
+                    <span>{index + 1}</span>
+                    <ProductVisual kind={riceVisual(item.productId)} compact />
+                    <b>{item.name}</b>
+                    <em>{recommendationText(item, answer.mode)}</em>
+                  </div>
+                ))}
+              </section>
+            )}
             {!rice && (
               <h2 className="m-0 mb-3 text-[18px] leading-[1.35] font-semibold">{product.name}</h2>
             )}
@@ -451,7 +476,7 @@ function DynamicAnswer({
             {rice && (
               <section className="product-card">
                 <div className="product-head">
-                  <ProductVisual kind="rice" />
+                  <ProductVisual kind={riceVisual(product.productId)} />
                   <div>
                     <span className="rank">1</span>
                     <h2>{product.name}</h2>
@@ -501,7 +526,7 @@ function DynamicAnswer({
             </div>
             {answer.alternatives.map((alt) => (
               <div className={`alternative-card ${rice ? "rice-alt" : ""}`} key={alt.productId}>
-                <ProductVisual kind={rice ? "engnice" : "lancome"} compact />
+                <ProductVisual kind={rice ? riceVisual(alt.productId) : "lancome"} compact />
                 <div>
                   <h3>{alt.name}</h3>
                   <p>同品类替代 · 查看同类作者原话</p>

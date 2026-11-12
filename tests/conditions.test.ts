@@ -55,6 +55,7 @@ describe("月龄换算（规格 3.1 / 9.1）", () => {
 describe("条件校验与合并优先级", () => {
   it("自然语言中的月龄与无过敏史能正确归一化", () => {
     const query = understandQueryDeterministic({ query: "婴儿米粉推荐，宝宝 7 个月，无过敏史" });
+    expect(query.productIds).toEqual(["p_rice_01", "p_rice_02"]);
     expect(query.statedConditions).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: "age_month", value: "7个月" }),
       expect.objectContaining({ key: "allergy", value: "无过敏" }),
@@ -62,6 +63,14 @@ describe("条件校验与合并优先级", () => {
     expect(validateConditionInput("baby_food", query.statedConditions.find((item) => item.key === "age_month")!, NOW)).toEqual({
       key: "age_month", value: { birthMonth: "2026-04" }, numeric: 7,
     });
+  });
+  it("明确商品查询只分析对应的一款米粉", () => {
+    expect(understandQueryDeterministic({ query: "小皮米粉怎么样" }).productIds).toEqual([
+      "p_rice_01",
+    ]);
+    expect(understandQueryDeterministic({ query: "低敏米粉适合宝宝吗" }).productIds).toEqual([
+      "p_rice_02",
+    ]);
   });
   it("小 B 的追问原话能归一化为月龄与有过敏", () => {
     const query = understandQueryDeterministic({ query: "婴儿米粉推荐，宝宝7个月，吃蛋黄过敏过" });

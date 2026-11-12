@@ -204,6 +204,9 @@ export interface ProductAnswer {
   imageUrl?: string;
   reasons: ReasonAnswer[];
   similarQuoteIds: string[];
+  /** 多商品推荐时，每款商品自己的统计；旧单品答案仍使用 AnswerPayload 顶层摘要。 */
+  globalSummary?: GlobalSummary;
+  similarSummary?: SimilarSummary;
 }
 
 export interface FollowupOption {
@@ -281,6 +284,8 @@ export interface ToolBundle {
   globalSummary: GlobalSummary;
   reasons: ReasonAnswer[];
   primaryProduct?: ProductAnswer;
+  /** 品类推荐查询的排序结果；缺省时兼容旧的单主商品答案。 */
+  rankedProducts?: ProductAnswer[];
   alternatives: ProductAnswer[];
   quotes: QuoteItem[];
   datasetNote: string;

@@ -225,4 +225,22 @@ describe("五个确定性工具", () => {
     expect(bundle.primaryProduct?.similarQuoteIds.length).toBeGreaterThan(0);
     expect(bundle.datasetNote).toContain("条内容");
   });
+
+  it("runTools：品类推荐会逐款统计并按推荐表现排序", async () => {
+    const { products, records } = await load();
+    const bundle = runTools({
+      category: "baby_food",
+      productIds: ["p_rice_01", "p_rice_02"],
+      conditions: [],
+      records,
+      products,
+    });
+    expect(bundle.rankedProducts?.map((product) => product.productId)).toEqual([
+      "p_rice_02",
+      "p_rice_01",
+    ]);
+    expect(bundle.rankedProducts?.every((product) => product.globalSummary)).toBe(true);
+    expect(bundle.primaryProduct?.productId).toBe("p_rice_02");
+    expect(bundle.alternatives).toEqual([]);
+  });
 });

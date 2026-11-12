@@ -122,18 +122,30 @@ export function makeNodes(ctx: GraphContext) {
       "understand_query",
       async (s) => {
         const products = await ctx.repo.listProducts();
+        const deterministic = understandQueryDeterministic({
+          query: s.query,
+          followupSelection: s.followupSelection,
+        });
         let understanding: QueryUnderstanding | null = null;
-        if (ctx.model.configured) {
+        // 追问选项来自受控 UI，品类与候选商品由规则确定，不再让模型二次猜测。
+        if (s.followupSelection?.length) {
+          understanding = deterministic;
+        } else if (ctx.model.configured) {
           understanding = await ctx.model.understandQuery({
             query: s.query,
             products: productVocabulary(products),
           });
         }
-        if (!understanding) {
-          understanding = understandQueryDeterministic({
-            query: s.query,
-            followupSelection: s.followupSelection,
-          });
+        if (!understanding ||
+          (understanding.intent === "unsupported" && deterministic.intent === "supported")) {
+          understanding = deterministic;
+        } else if (
+          understanding.intent === "supported" &&
+          deterministic.intent === "supported"
+        ) {
+          // 受控词表命中时，候选商品集合以配置为准；模型只补充自然语言条件。
+          understanding.category = deterministic.category;
+          understanding.productIds = deterministic.productIds;
         }
 
         // 规则校验优先于模型建议：模型不能突破品类词表、产品 ID 或条件来源限制

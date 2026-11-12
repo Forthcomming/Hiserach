@@ -43,7 +43,10 @@ export function understandQueryDeterministic(args: {
     category = keys.has("allergy") || keys.has("diarrhea") || keys.has("age_month")
       ? "baby_food"
       : "beauty";
-    productIds = getCategoryConfig(category).intentAliases[0]?.productIds ?? [];
+    productIds = getCategoryConfig(category).intentAliases.reduce<string[]>(
+      (best, alias) => (alias.productIds.length > best.length ? alias.productIds : best),
+      [],
+    );
   }
 
   if (!category || productIds.length === 0) {

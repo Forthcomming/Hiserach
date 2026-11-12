@@ -41,6 +41,16 @@ class GoodGateway implements ModelGateway {
   }
 }
 
+class FollowupMisclassifyingGateway implements ModelGateway {
+  readonly configured = true;
+  async understandQuery() {
+    return { intent: "unsupported" as const, productIds: [], statedConditions: [] };
+  }
+  async composeAnswer({ bundle }: { bundle: ToolBundle }) {
+    return draftFrom(bundle);
+  }
+}
+
 /** 第一次校验失败、第二次通过：验证"重试一次"分支。 */
 class RetryThenGoodGateway implements ModelGateway {
   readonly configured = true;
@@ -156,6 +166,10 @@ describe("Agent 状态图端到端链路", () => {
       model: new GoodGateway(),
     });
     expect(state.answer?.mode).toBe("global");
+    expect(state.answer?.products.map((product) => product.productId)).toEqual([
+      "p_rice_02",
+      "p_rice_01",
+    ]);
     expect(state.answer?.similarSummary?.recommendRate).toBeUndefined();
     expect(state.answer?.followup?.dimensions.map((d) => d.key)).toEqual(
       expect.arrayContaining(["allergy", "diarrhea", "age_month"]),
@@ -175,6 +189,10 @@ describe("Agent 状态图端到端链路", () => {
     });
     expect(first.state.answer?.mode).toBe("similar");
     expect(first.state.answer?.similarSummary?.authorCount).toBe(5);
+    expect(first.state.answer?.products.map((product) => product.productId)).toEqual([
+      "p_rice_02",
+      "p_rice_01",
+    ]);
     const changed = first.events.find((e) => e.type === "memory.changed");
     expect(changed).toBeDefined();
     expect((changed as { undoable: boolean }).undoable).toBe(true);
@@ -191,6 +209,21 @@ describe("Agent 状态图端到端链路", () => {
     expect(second.state.answer?.appliedConditions.some((c) => c.source === "memory")).toBe(true);
     const events = await second.repo.listMemoryEvents(second.userId);
     expect(events.some((e) => e.action === "used")).toBe(true);
+  });
+
+  it("追问卡片使用受控意图，不受模型误判影响", async () => {
+    const { state } = await run({
+      persona: "xiaob",
+      query: "补充条件：有过敏、有腹泻、7个月",
+      followupSelection: [
+        { key: "allergy", value: "有过敏" },
+        { key: "diarrhea", value: "有腹泻" },
+        { key: "age_month", value: "7个月" },
+      ],
+      model: new FollowupMisclassifyingGateway(),
+    });
+    expect(state.unsupported).toBe(false);
+    expect(state.answer?.products).toHaveLength(2);
   });
 
   it("AC-02 超范围查询：不调用统计工具、不写记忆、只给受限提示", async () => {

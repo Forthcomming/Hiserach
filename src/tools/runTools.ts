@@ -32,7 +32,6 @@ export interface RunToolsArgs {
  */
 export function runTools(args: RunToolsArgs): ToolBundle {
   const { category, productIds, conditions, records, products } = args;
-  const primaryProductId = productIds[0];
   const categoryProductIds = products
     .filter((p) => p.category === category)
     .map((p) => p.id);
@@ -44,20 +43,64 @@ export function runTools(args: RunToolsArgs): ToolBundle {
     conditions,
   });
 
-  const summary = summarizeProduct({
-    records,
-    productId: primaryProductId,
-    similarAuthorIds,
-  });
-  const keyRisk = pickGlobalKeyRisk({ records, productId: primaryProductId });
-  const globalSummary = { ...summary.global, ...(keyRisk ? { keyRisk } : {}) };
-
-  const reasons = aggregateReasons({
-    records,
-    productId: primaryProductId,
-    similarAuthorIds,
-    category,
-  });
+  const rankedProducts: ProductAnswer[] = productIds
+    .flatMap((productId): ProductAnswer[] => {
+      const product = products.find((item) => item.id === productId);
+      if (!product) return [];
+      const summary = summarizeProduct({ records, productId, similarAuthorIds });
+      const keyRisk = pickGlobalKeyRisk({ records, productId });
+      const globalSummary = {
+        ...summary.global,
+        ...(keyRisk ? { keyRisk } : {}),
+      };
+      const reasons = aggregateReasons({
+        records,
+        productId,
+        similarAuthorIds,
+        category,
+      });
+      const productQuotes = getQuotes({
+        records: similarRecords,
+        products,
+        category,
+        filter: { productId },
+      });
+      return [{
+        productId: product.id,
+        name: product.name,
+        ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
+        reasons,
+        similarQuoteIds: productQuotes.map((q) => q.id),
+        globalSummary,
+        ...(summary.similar ? { similarSummary: summary.similar } : {}),
+      }];
+    })
+    .sort((a, b) => {
+      const aSimilar = a.similarSummary?.recommendRate;
+      const bSimilar = b.similarSummary?.recommendRate;
+      if (aSimilar !== undefined || bSimilar !== undefined) {
+        const rate = (bSimilar ?? -1) - (aSimilar ?? -1);
+        if (rate) return rate;
+        const count = (b.similarSummary?.recommendCount ?? 0) -
+          (a.similarSummary?.recommendCount ?? 0);
+        if (count) return count;
+      }
+      const globalRate = (b.globalSummary?.recommendRate ?? 0) -
+        (a.globalSummary?.recommendRate ?? 0);
+      if (globalRate) return globalRate;
+      const globalCount = (b.globalSummary?.recommendCount ?? 0) -
+        (a.globalSummary?.recommendCount ?? 0);
+      return globalCount || a.productId.localeCompare(b.productId);
+    });
+  const primaryProduct = rankedProducts[0];
+  const globalSummary = primaryProduct?.globalSummary ?? {
+    authorCount: 0,
+    recommendCount: 0,
+    notRecommendCount: 0,
+    recommendRate: 0,
+  };
+  const similarSummary = primaryProduct?.similarSummary;
+  const reasons = rankedProducts.flatMap((product) => product.reasons);
   const alternatives = pickAlternatives({
     records,
     products,
@@ -66,31 +109,12 @@ export function runTools(args: RunToolsArgs): ToolBundle {
     similarAuthorIds,
   });
 
-  const primaryProduct = products.find((p) => p.id === primaryProductId);
-  const primaryQuotes = getQuotes({
-    records: similarRecords,
-    products,
-    category,
-    filter: { productId: primaryProductId },
-  });
-  const productsAnswer: ProductAnswer[] = primaryProduct
-    ? [
-        {
-          productId: primaryProduct.id,
-          name: primaryProduct.name,
-          imageUrl: primaryProduct.imageUrl,
-          reasons,
-          similarQuoteIds: primaryQuotes.map((q) => q.id),
-        },
-      ]
-    : [];
-
   // 冷启动 / 同类为 0 人：追问卡片只放"有同类人数据"的维度（AC-04）
   const coveredKeys = new Set<string>();
   for (const r of records) {
     for (const key of Object.keys(r.authorConditions)) coveredKeys.add(key);
   }
-  const needsFollowup = summary.mode === "global";
+  const needsFollowup = (similarSummary?.authorCount ?? 0) === 0;
   const followupDimensions = availableFollowupDimensions(category, [...coveredKeys]);
 
   const quotes = getQuotes({ records: similarRecords, products, category, filter: {} });
@@ -103,10 +127,10 @@ export function runTools(args: RunToolsArgs): ToolBundle {
     productIds,
     conditions,
     similarAuthorIds,
-    similarSummary: summary.similar,
+    similarSummary,
     globalSummary,
     reasons,
-    ...(productsAnswer[0] ? { primaryProduct: productsAnswer[0] } : {}),
+    ...(primaryProduct ? { primaryProduct, rankedProducts } : {}),
     alternatives: alternatives.map((alt) => ({
       ...alt,
       similarQuoteIds: getQuotes({
