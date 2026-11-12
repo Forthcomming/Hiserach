@@ -114,11 +114,11 @@ export function canonicalEnumValue(
   if (dim.options.includes(raw)) return raw;
   // 只接受明确同义表述，避免把"他人情况/否定表达"误写入记忆（规格 3.1）。
   const aliases: Record<string, string> = {
-    有过敏史: "有过敏",
-    过敏: "有过敏",
-    吃蛋黄过敏: "有过敏",
     无过敏史: "无过敏",
     不过敏: "无过敏",
+    有过敏史: "有过敏",
+    吃蛋黄过敏: "有过敏",
+    过敏: "有过敏",
     有拉肚子: "有腹泻",
     拉肚子: "有腹泻",
     脂溢性皮炎: "脂溢性皮炎",

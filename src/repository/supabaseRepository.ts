@@ -278,16 +278,6 @@ export function createSupabaseRepository(): Repository {
       return rows.filter((r) => ids.has(r.productId));
     },
 
-    async getExperienceById(recordId) {
-      const { data, error } = await db()
-        .from("experience_records")
-        .select("*")
-        .eq("id", recordId)
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      return data ? toExperience(data as Row) : null;
-    },
-
     async listActiveMemories(userId, category) {
       return activeOf(userId, category);
     },

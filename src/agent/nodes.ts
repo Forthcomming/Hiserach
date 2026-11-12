@@ -11,6 +11,7 @@ import type {
   WorkingCondition,
 } from "@/domain/types";
 import { newId, nowIso } from "@/lib/ids";
+import { serverEnv } from "@/lib/env";
 import type { Repository } from "@/repository/types";
 import { runTools } from "@/tools/runTools";
 import { decideMemoryPlan, memoryChangeSummary } from "@/memory/decide";
@@ -63,13 +64,17 @@ async function computeBundle(ctx: GraphContext, s: AgentState): Promise<ToolBund
     ctx.repo.listProducts(category),
     ctx.repo.listExperiences({ category }),
   ]);
-  return runTools({
+  const bundle = runTools({
     category,
     productIds: s.queryUnderstanding!.productIds,
     conditions: s.workingConditions,
     records,
     products,
   });
+  if (serverEnv.dataBackend === "memory") {
+    bundle.datasetNote = `本地联调夹具：基于 ${records.length} 条内容（模拟记录，非真实用户评价）`;
+  }
+  return bundle;
 }
 
 function emitDelta(ctx: GraphContext, text: string): void {

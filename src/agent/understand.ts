@@ -58,7 +58,7 @@ export function understandQueryDeterministic(args: {
         if (m) {
           statedConditions.push({
             key: dim.key,
-            value: `${Number(m[1])}__months_old`,
+            value: `${Number(m[1])}个月`,
             source: "user_input",
             raw: m[0],
           });

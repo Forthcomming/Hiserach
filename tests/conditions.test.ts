@@ -6,6 +6,7 @@ import {
   validateConditionInput,
 } from "@/domain/conditions";
 import type { ConditionInput, MemoryItem } from "@/domain/types";
+import { understandQueryDeterministic } from "@/agent/understand";
 
 const NOW = new Date("2026-11-12T12:00:00+08:00");
 
@@ -52,6 +53,25 @@ describe("月龄换算（规格 3.1 / 9.1）", () => {
 });
 
 describe("条件校验与合并优先级", () => {
+  it("自然语言中的月龄与无过敏史能正确归一化", () => {
+    const query = understandQueryDeterministic({ query: "婴儿米粉推荐，宝宝 7 个月，无过敏史" });
+    expect(query.statedConditions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "age_month", value: "7个月" }),
+      expect.objectContaining({ key: "allergy", value: "无过敏" }),
+    ]));
+    expect(validateConditionInput("baby_food", query.statedConditions.find((item) => item.key === "age_month")!, NOW)).toEqual({
+      key: "age_month", value: { birthMonth: "2026-04" }, numeric: 7,
+    });
+  });
+  it("小 B 的追问原话能归一化为月龄与有过敏", () => {
+    const query = understandQueryDeterministic({ query: "婴儿米粉推荐，宝宝7个月，吃蛋黄过敏过" });
+    expect(query.intent).toBe("supported");
+    expect(query.category).toBe("baby_food");
+    expect(query.statedConditions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "age_month", value: "7个月" }),
+      expect.objectContaining({ key: "allergy", value: "有过敏" }),
+    ]));
+  });
   it("词表外条件、他人情况、非法值一律丢弃", () => {
     const bad: ConditionInput[] = [
       { key: "unknown_key", value: "有过敏", source: "user_input" },

@@ -61,8 +61,6 @@ export interface Repository {
   listProducts(category?: Category): Promise<Product[]>;
   getProduct(productId: string): Promise<Product | null>;
   listExperiences(filter?: { productIds?: string[]; category?: Category }): Promise<ExperienceRecord[]>;
-  /** 按记录 ID 取单条经验原文，供站内证据预览页使用（只读）。 */
-  getExperienceById(recordId: string): Promise<ExperienceRecord | null>;
 
   // ── 记忆 ──────────────────────────────────────────────────────────────
   listActiveMemories(userId: string, category?: Category): Promise<MemoryItem[]>;

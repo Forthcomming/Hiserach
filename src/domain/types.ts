@@ -179,7 +179,7 @@ export interface QuoteItem {
   text: string;
   stance: Stance;
   sourceType: SourceType;
-  /** 已过安全清洗：站内合成样本页 /evidence/:id，或 https 白名单外链；弹层始终展示完整原话。 */
+  /** 已经过域名白名单校验；弹层内始终展示完整原话，跳转仅作补充。 */
   sourceUrl?: string;
   publishedAt: string;
   authorConditions: Array<{ key: string; label: string; valueLabel: string }>;

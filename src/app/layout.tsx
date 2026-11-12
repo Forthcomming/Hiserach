@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import "./figma.css";
 
 export const metadata: Metadata = {
-  title: "同境检索 · 同类人口碑 MVP",
-  description: "同类人口碑检索：Agent 链路、确定性统计与可追溯证据链",
+  title: "同类人口碑 · AI 搜",
+  description: "把别人的经验，变成对你适用、可以验证的决策答案",
+  icons: { icon: "/favicon.png" },
 };
 
 export const viewport: Viewport = {
@@ -14,7 +16,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN">
-      <body style={{ margin: 0, background: "#fff", color: "#1a1a1a" }}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }

@@ -1,4 +1,4 @@
--- 同境检索「同类人口碑」MVP 数据模型
+-- 小红书 AI 搜「同类人口碑」MVP 数据模型
 -- 对应 technical-spec.md 5.1；Supabase Postgres + pgvector。
 -- 所有写操作只经由服务端 Repository（service role key 不下发客户端）。
 
@@ -61,19 +61,12 @@ alter table experience_records
 alter table experience_records
   add constraint experience_quote_verbatim
   check (source_text is null or position(quote in source_text) > 0);
--- source_url 只允许两类：站内合成样本预览路径，或 https 外部真实来源。
--- 外部域名白名单由服务端 env.ts 强制校验；此处只拦明显非法的协议与开放重定向。
+-- source_url 只允许 https 且域名受控，防止开放重定向
 alter table experience_records
   drop constraint if exists experience_source_https;
 alter table experience_records
-  drop constraint if exists experience_source_url_safe;
-alter table experience_records
-  add constraint experience_source_url_safe
-  check (
-    source_url is null
-    or source_url ~ '^/evidence/[A-Za-z0-9_-]+$'
-    or source_url like 'https://%'
-  );
+  add constraint experience_source_https
+  check (source_url is null or source_url like 'https://%');
 
 -- ── 记忆 ──────────────────────────────────────────────────────────────────
 create table if not exists memory_items (

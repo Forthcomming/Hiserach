@@ -196,17 +196,10 @@ describe("五个确定性工具", () => {
     expect(alts).toEqual([]);
   });
 
-  it("get_quotes：按产品、原因、立场过滤，来源链接均为安全的站内/白名单地址", async () => {
+  it("get_quotes：按产品、原因、立场过滤，来源链接命中白名单", async () => {
     const { products, records } = await load();
     const all = getQuotes({ records, products, category: "beauty", filter: {} });
-    expect(
-      all.every(
-        (q) =>
-          !q.sourceUrl ||
-          /^\/evidence\/[A-Za-z0-9_-]+$/.test(q.sourceUrl) ||
-          q.sourceUrl.startsWith("https://"),
-      ),
-    ).toBe(true);
+    expect(all.every((q) => !q.sourceUrl || q.sourceUrl.startsWith("https://"))).toBe(true);
     const byReason = getQuotes({
       records,
       products,

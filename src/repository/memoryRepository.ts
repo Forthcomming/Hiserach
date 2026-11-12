@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { sanitizeSourceUrl, serverEnv } from "@/lib/env";
+import { serverEnv } from "@/lib/env";
 import { newAnonId, newId, nowIso } from "@/lib/ids";
 import type {
   AnonymousUser,
@@ -84,7 +84,8 @@ function loadFixture(path: string): { products: Product[]; experiences: Experien
       quote,
       ...(sourceText ? { sourceText } : {}),
       sourceType: r.source_type as ExperienceRecord["sourceType"],
-      sourceUrl: sanitizeSourceUrl(r.source_url ? String(r.source_url) : undefined),
+      // 测试夹具中的 fixture 链接并非真实原文，不能作为可验证来源开放。
+      sourceUrl: undefined,
       publishedAt: String(r.published_at ?? ""),
     } satisfies ExperienceRecord;
   });
@@ -257,11 +258,6 @@ export function createMemoryRepository(fixturePath = serverEnv.seedFixturePath):
               store.products.find((p) => p.id === r.productId)?.category === filter.category),
         ),
       );
-    },
-
-    async getExperienceById(recordId) {
-      const r = store.experiences.find((x) => x.id === recordId);
-      return r ? structuredClone(r) : null;
     },
 
     async listActiveMemories(userId, category) {
