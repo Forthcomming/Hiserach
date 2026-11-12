@@ -19,7 +19,8 @@ export const serverEnv = {
     return process.env.LLM_BASE_URL ?? "";
   },
   get llmModel(): string {
-    return process.env.LLM_MODEL ?? "deepseek-chat";
+    // deepseek-chat / deepseek-reasoner 已于 2026-07-24 退役；当前官方快档为 deepseek-flash。
+    return process.env.LLM_MODEL ?? "deepseek-flash";
   },
   get llmTimeoutMs(): number {
     const n = Number(process.env.LLM_TIMEOUT_MS);

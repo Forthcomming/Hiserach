@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { generateObject } from "ai";
+import { generateText } from "ai";
 import { z } from "zod";
 import { getCategoryConfig } from "@/domain/categories";
 import { serverEnv } from "@/lib/env";
@@ -55,6 +55,25 @@ class NullModelGateway implements ModelGateway {
   }
 }
 
+/**
+ * DeepSeek 等 OpenAI 兼容服务只保证 response_format=json_object 的 JSON 输出，
+ * 不支持 generateObject 默认的严格 json_schema。改为 generateText + 手动 Zod 解析，
+ * 解析失败统一返回 null，由 Agent 节点走确定性模板兜底。
+ */
+function parseStructured<T>(text: string, schema: z.ZodType<T>): T | null {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+  try {
+    const parsed = schema.safeParse(JSON.parse(cleaned));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 function vocabularyText(): string {
   return (["beauty", "baby_food"] as Category[])
     .map((c) => {
@@ -88,8 +107,15 @@ class OpenAiCompatibleGateway implements ModelGateway {
     const timeout = new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), serverEnv.llmTimeoutMs);
     });
-    const request = generateObject({ model, schema, system, prompt })
-      .then((r) => r.object as T)
+    const request = generateText({
+      model,
+      system: `${system}\n只输出一个 JSON 对象，不要解释、不要 markdown 代码块。`,
+      prompt,
+      providerOptions: {
+        openai: { responseFormat: { type: "json_object" } },
+      },
+    })
+      .then((r) => parseStructured<T>(r.text, schema))
       .catch(() => null);
 
     try {

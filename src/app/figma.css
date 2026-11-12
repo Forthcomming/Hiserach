@@ -1056,16 +1056,26 @@ button {
   font-size: 11px;
   font-weight: 650;
 }
+.followup-dimension + .followup-dimension {
+  margin-top: 18px;
+}
+.followup-dimension > label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 11px;
+  font-weight: 650;
+}
 .option-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 10px 12px;
 }
 .option-row button {
   display: flex;
   align-items: center;
   gap: 3px;
-  padding: 7px 9px;
+  min-height: 32px;
+  padding: 8px 12px;
   border-radius: 8px;
   background: #fff;
   color: #777;

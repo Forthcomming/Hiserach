@@ -226,7 +226,7 @@ function DynamicFollowup({
         </div>
       </div>
       {card.dimensions.map((dimension) => (
-        <div key={dimension.key}>
+        <div className="followup-dimension" key={dimension.key}>
           <label>{dimension.label === "月龄" ? "宝宝月龄" : dimension.label}</label>
           <div className="option-row">
             {(dimension.type === "month"

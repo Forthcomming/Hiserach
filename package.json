@@ -8,7 +8,9 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:seed": "node scripts/seed-supabase.mjs",
+    "db:seed:dry": "node scripts/seed-supabase.mjs --dry-run"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.115",
