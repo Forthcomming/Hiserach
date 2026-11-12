@@ -261,7 +261,7 @@ describe("Agent 状态图端到端链路", () => {
     expect(state.answer?.products).toHaveLength(2);
   });
 
-  it("AC-02 超范围查询：通用建议 + 无同类人数据声明，不调用统计工具、不写记忆", async () => {
+  it("AC-02 超范围查询：闲聊气泡建议，不调用统计工具、不写记忆", async () => {
     const { state, repo, userId } = await run({
       persona: "xiaolin",
       query: "给我推荐一款手机",
@@ -271,14 +271,26 @@ describe("Agent 状态图端到端链路", () => {
     expect(state.toolResult).toBeUndefined();
     expect(state.answer?.mode).toBe("general");
     expect(state.answer?.adviceText).toContain("手机");
-    expect(state.answer?.notice?.text).toContain("暂时没有同类人数据");
-    expect(state.answer?.notice?.quickTags).toEqual(["DW粉底", "婴儿米粉推荐"]);
+    expect(state.answer?.notice).toBeUndefined();
     expect(state.answer?.products).toEqual([]);
     expect(state.answer?.globalSummary.recommendRate).toBe(0);
     expect(await repo.listMemories(userId)).toHaveLength(2); // 仅预置记忆，无新增
     const nodes = nodeNames(awaitTraceEvents(state));
     expect(nodes).not.toContain("run_tools");
     expect(nodes).toContain("build_general_answer");
+  });
+
+  it("问候语闲聊：固定气泡回复，不跑模型与统计工具", async () => {
+    const { state } = await run({
+      persona: "xiaolin",
+      query: "你好",
+      model: new GoodGateway(),
+    });
+    expect(state.unsupported).toBe(true);
+    expect(state.answer?.mode).toBe("general");
+    expect(state.answer?.adviceText).toBe("你好呀，有什么想聊的或者需要帮忙的，随时说～");
+    expect(state.answer?.notice).toBeUndefined();
+    expect(nodeNames(awaitTraceEvents(state))).not.toContain("run_tools");
   });
 
   it("会话 Continuity：上轮 DW 后「那混油皮呢」继承品类并抽取肤质", async () => {

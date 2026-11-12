@@ -314,9 +314,14 @@ function DynamicActions({ answer, onRetry }: { answer: AnswerPayload; onRetry: (
   const [favorite, setFavorite] = useState(false);
   const [disliked, setDisliked] = useState(false);
   async function copy() {
-    await navigator.clipboard.writeText(
-      `${answer.products.map((item) => item.name).join("、")}：${answer.similarSummary ? `${answer.similarSummary.authorCount} 位同类作者，${answer.similarSummary.recommendCount} 位推荐` : `全站 ${percent(answer.globalSummary.recommendRate)} 推荐`}`,
-    );
+    const text =
+      answer.adviceText?.trim() ||
+      `${answer.products.map((item) => item.name).join("、")}：${
+        answer.similarSummary
+          ? `${answer.similarSummary.authorCount} 位同类作者，${answer.similarSummary.recommendCount} 位推荐`
+          : `全站 ${percent(answer.globalSummary.recommendRate)} 推荐`
+      }`;
+    await navigator.clipboard.writeText(text);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   }
@@ -414,7 +419,6 @@ function DynamicAnswer({
   onQuotes,
   onFollowup,
   onRetry,
-  onSearch,
 }: {
   answer: AnswerPayload;
   turnId: string;
@@ -423,22 +427,12 @@ function DynamicAnswer({
   onQuotes: (target: QuoteTarget) => void;
   onFollowup: (items: Array<{ key: string; value: string }>) => void;
   onRetry: () => void;
-  onSearch: (message: string) => void;
 }) {
   if (answer.mode === "general") {
     return (
-      <article className="answer-card unsupported-card">
+      <article className="answer-card chat-bubble">
         {answer.adviceText && <p className="general-advice">{answer.adviceText}</p>}
-        {answer.notice && <p className="peer-empty-notice">{answer.notice.text}</p>}
-        {!!answer.notice?.quickTags?.length && (
-          <div className="unsupported-options">
-            {answer.notice.quickTags.map((tag) => (
-              <button key={tag} onClick={() => onSearch(tag)}>
-                {tag}
-              </button>
-            ))}
-          </div>
-        )}
+        <DynamicActions answer={answer} onRetry={onRetry} />
       </article>
     );
   }
@@ -452,13 +446,12 @@ function DynamicAnswer({
     <>
       <article className="answer-card">
         {!!answer.appliedConditions.length && (
-          <button className="condition-bar" onClick={() => onConditions(answer)}>
+          <div className="condition-bar">
             <Icon name="shield" size={20} />
             <span>
-              <b>已按你的情况筛选</b>
+              <b>根据您的肤质进行筛选</b>
             </span>
-            <Icon name="chevron" size={17} />
-          </button>
+          </div>
         )}
         {answer.notice && (
           <p className="peer-empty-notice">{answer.notice.text}</p>
@@ -1332,15 +1325,19 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
                     void search(`补充条件：${items.map((item) => item.value).join("、")}`, items)
                   }
                   onRetry={() => void search(turn.request, turn.selection)}
-                  onSearch={(message) => void search(message)}
                 />
               </div>
             ))}
             {pendingText && <div className="user-bubble">{pendingText}</div>}
             {busy && (
-              <div className="figma-thinking">
-                <DotsLogo small />
-                <span>正在查找同类作者的经验...</span>
+              <div className="figma-thinking" aria-label="正在思考">
+                <span className="thinking-cloud">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M7.5 15.2c-2.2 0-4-1.7-4-3.8 0-1.8 1.3-3.3 3.1-3.7.6-2.1 2.5-3.6 4.8-3.6 2.1 0 3.9 1.2 4.7 3 .4-.1.8-.2 1.2-.2 2.1 0 3.8 1.6 3.8 3.6s-1.7 3.6-3.8 3.6H7.5Z" />
+                    <circle cx="8.2" cy="18.2" r="1.15" />
+                    <circle cx="5.6" cy="20.6" r="0.85" />
+                  </svg>
+                </span>
               </div>
             )}
           </>

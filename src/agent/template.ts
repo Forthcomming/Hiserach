@@ -6,8 +6,14 @@ import type {
   ToolBundle,
 } from "@/domain/types";
 import { modeOf } from "@/tools/runTools";
-import { NO_PEER_DATA_NOTICE } from "./notices";
 import { assembleAnswer } from "./validate";
+
+const GREETING_RE = /^(你好|您好|嗨|哈喽|hello|hi|hey)[呀啊喔哦！!～~。.\s]*$/i;
+const GREETING_REPLY = "你好呀，有什么想聊的或者需要帮忙的，随时说～";
+
+export function isGreetingQuery(query: string): boolean {
+  return GREETING_RE.test(query.trim());
+}
 
 /**
  * 模板兜底（规格 6.8 / AC-10）：模型超时、报错或两次校验失败时，
@@ -35,9 +41,7 @@ export function renderTemplateAnswer(args: {
   return assembleAnswer(args);
 }
 
-const DEMO_QUICK_TAGS = ["DW粉底", "婴儿米粉推荐"];
-
-/** 超范围通用答：无工具统计、无原话；可附快捷标签引导回 Demo 查询。 */
+/** 超范围闲聊答：对话气泡正文，无工具统计、无原话、无引导标签。 */
 export function generalAdviceAnswer(args: {
   turnId: string;
   adviceText: string;
@@ -55,10 +59,6 @@ export function generalAdviceAnswer(args: {
     products: [],
     alternatives: [],
     adviceText: args.adviceText,
-    notice: {
-      text: NO_PEER_DATA_NOTICE,
-      quickTags: DEMO_QUICK_TAGS,
-    },
     disclaimers: [
       "内容仅用于面试演示，基于常识建议，非医疗建议，未使用同类人样本数据",
       ...(args.category ? [getCategoryConfig(args.category).medicalDisclaimer] : []),
@@ -70,5 +70,6 @@ export function generalAdviceAnswer(args: {
 
 /** 模型失败时的通用答模板。 */
 export function fallbackGeneralAdvice(query: string): string {
+  if (isGreetingQuery(query)) return GREETING_REPLY;
   return `关于「${query.slice(0, 40)}」，我可以先给一些通用选购思路，但当前没有可对齐的同类人样本，无法提供口碑比例或原话。你可以试试 Demo 已覆盖的「DW粉底」或「婴儿米粉推荐」。`;
 }

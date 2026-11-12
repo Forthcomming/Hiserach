@@ -28,6 +28,7 @@ import { assembleAnswer, validateAnswerDraft, validateAnswerPayload } from "./va
 import {
   fallbackGeneralAdvice,
   generalAdviceAnswer,
+  isGreetingQuery,
   renderTemplateAnswer,
   templateHeadline,
 } from "./template";
@@ -306,17 +307,21 @@ export function makeNodes(ctx: GraphContext) {
       },
     ),
 
-    /** 超范围：模型常识建议 + 诚实声明无同类人数据；不跑统计工具。 */
+    /** 超范围：闲聊/常识建议气泡；问候语固定回复，不跑统计工具。 */
     build_general_answer: node(
       "build_general_answer",
       async (s) => {
-        const draft = ctx.model.configured
-          ? await ctx.model.composeGeneralAdvice({
-              query: s.query,
-              sessionHint: sessionHintText(s.sessionContext) || undefined,
-            })
-          : null;
-        const adviceText = draft?.text?.trim() || fallbackGeneralAdvice(s.query);
+        const greeting = isGreetingQuery(s.query);
+        const draft =
+          !greeting && ctx.model.configured
+            ? await ctx.model.composeGeneralAdvice({
+                query: s.query,
+                sessionHint: sessionHintText(s.sessionContext) || undefined,
+              })
+            : null;
+        const adviceText = greeting
+          ? fallbackGeneralAdvice(s.query)
+          : draft?.text?.trim() || fallbackGeneralAdvice(s.query);
         const answer = generalAdviceAnswer({
           turnId: s.turnId,
           adviceText,
@@ -325,8 +330,8 @@ export function makeNodes(ctx: GraphContext) {
         emitDelta(ctx, adviceText.slice(0, 80));
         return {
           answer,
-          degraded: !draft,
-          ...(draft ? {} : { fallbackReason: "model_unconfigured" as const }),
+          degraded: !greeting && !draft,
+          ...(!greeting && !draft ? { fallbackReason: "model_unconfigured" as const } : {}),
         };
       },
       {

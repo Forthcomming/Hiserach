@@ -452,7 +452,7 @@ function DWAnswer({
         <button className="condition-bar" onClick={onConditions}>
           <Icon name="shield" size={20} />
           <span>
-            <b>已按你的情况筛选</b>
+            <b>根据您的肤质进行筛选</b>
           </span>
           <Icon name="chevron" size={17} />
         </button>

@@ -1,6 +1,53 @@
 @import "tailwindcss";
 
-.figma-thinking { display: flex; align-items: center; gap: 10px; padding: 20px 16px; color: #6c6c6c; font-size: 13px; }
+.figma-thinking {
+  display: flex;
+  align-items: center;
+  padding: 10px 4px 6px;
+}
+.thinking-cloud {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #c8c8ca;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(255, 255, 255, 0.72) 42%,
+    rgba(255, 255, 255, 0) 72%
+  );
+  animation: thinking-pulse 1.7s ease-in-out infinite;
+}
+.thinking-cloud svg {
+  display: block;
+}
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.chat-bubble {
+  padding: 16px 16px 12px;
+}
+.chat-bubble .general-advice {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #262628;
+}
+.chat-bubble .answer-actions {
+  margin-top: 14px;
+  padding-top: 0;
+  border-top: none;
+}
 .small-sample-note { color: #8c6d47; font-size: 12px; line-height: 1.5; }
 .memory-edit-options { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px; }
 .memory-edit-options button { border-radius: 18px; padding: 8px 12px; background: #fff; border: 1px solid #e7e7e7; }
