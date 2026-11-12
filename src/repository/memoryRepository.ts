@@ -423,14 +423,20 @@ export function createMemoryRepository(fixturePath = serverEnv.seedFixturePath):
   return repo;
 }
 
-let singleton: Repository | null = null;
+const memoryRepositoryGlobal = globalThis as typeof globalThis & {
+  __hisearchMemoryRepository?: Repository;
+};
 
 export function getDefaultMemoryRepository(): Repository {
-  if (!singleton) singleton = createMemoryRepository();
-  return singleton;
+  // Next.js 开发热更新会重新执行模块；挂到 globalThis 后，浏览器中仍在使用的
+  // 匿名会话不会因为一次代码保存就从内存仓库消失。
+  if (!memoryRepositoryGlobal.__hisearchMemoryRepository) {
+    memoryRepositoryGlobal.__hisearchMemoryRepository = createMemoryRepository();
+  }
+  return memoryRepositoryGlobal.__hisearchMemoryRepository;
 }
 
 /** 仅供测试重置进程内单例状态。 */
 export function resetDefaultMemoryRepository(): void {
-  singleton = null;
+  delete memoryRepositoryGlobal.__hisearchMemoryRepository;
 }

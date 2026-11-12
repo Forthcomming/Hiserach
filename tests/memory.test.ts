@@ -1,7 +1,11 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { MemoryItem, MemorySource } from "@/domain/types";
-import { createMemoryRepository } from "@/repository/memoryRepository";
+import {
+  createMemoryRepository,
+  getDefaultMemoryRepository,
+  resetDefaultMemoryRepository,
+} from "@/repository/memoryRepository";
 import type { MemoryWritePlan } from "@/repository/types";
 
 const FIXTURE = resolve(process.cwd(), "data/fixtures.json");
@@ -23,6 +27,19 @@ function activeOf(memories: MemoryItem[], key: string) {
 }
 
 describe("记忆层状态机（规格 3.4 / 5.1 / AC-08）", () => {
+  it("默认内存仓库保持进程级会话，并可显式重置", async () => {
+    resetDefaultMemoryRepository();
+    const first = getDefaultMemoryRepository();
+    const user = await first.createUser("xiaob");
+    const session = await first.createSession(user.id);
+
+    expect(await getDefaultMemoryRepository().getSession(session.id)).not.toBeNull();
+
+    resetDefaultMemoryRepository();
+    expect(await getDefaultMemoryRepository().getSession(session.id)).toBeNull();
+    resetDefaultMemoryRepository();
+  });
+
   it("小林预置两条护肤条件，小B 保持无记忆", async () => {
     const repo = createMemoryRepository(FIXTURE);
     const xiaolin = await repo.createUser("xiaolin");

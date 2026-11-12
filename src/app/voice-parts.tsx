@@ -104,6 +104,7 @@ export function QuoteSheet({ target, sessionId, onClose }: { target: QuoteTarget
     const query = new URLSearchParams({ sessionId, productId: target.productId });
     if (target.reasonId) query.set("reasonId", target.reasonId);
     if (target.stance) query.set("stance", target.stance);
+    query.set("allowedQuoteIds", target.allowedIds.join(","));
     readJson<{ quotes: QuoteItem[] }>(`/api/quotes?${query}`)
       .then((data) => { setQuotes(data.quotes.filter((quote) => target.allowedIds.includes(quote.id))); setStatus(""); })
       .catch((error) => setStatus(error instanceof Error ? error.message : "读取失败"));

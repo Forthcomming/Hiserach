@@ -36,12 +36,16 @@ export async function GET(request: Request) {
         conditionContext,
       },
     });
+    // 答案生成阶段已经确定了本轮可展示的原话。接口只返回这批原话，
+    // 避免把同产品下其他人群的评价交给前端后再做唯一过滤。
+    const allowedQuoteIds = new Set(query.allowedQuoteIds.split(",").filter(Boolean));
+    const allowedQuotes = quotes.filter((quote) => allowedQuoteIds.has(quote.id));
 
     return jsonOk({
       productId: query.productId,
       reasonId: query.reasonId ?? null,
       stance: query.stance ?? null,
-      quotes,
+      quotes: allowedQuotes,
     });
   } catch (error) {
     return jsonError(error);

@@ -29,6 +29,14 @@ export const QuotesQuerySchema = z.object({
   productId: z.string().min(1).max(80),
   reasonId: z.string().min(1).max(120).optional(),
   stance: z.enum(["recommend", "not_recommend"]).optional(),
+  allowedQuoteIds: z
+    .string()
+    .max(2_000)
+    .refine((raw) => {
+      if (!raw) return true;
+      const ids = raw.split(",");
+      return ids.length <= 50 && ids.every((id) => /^[A-Za-z0-9_-]+$/.test(id));
+    }, "评价 ID 列表不合法"),
   conditionContext: z.string().max(300).optional(),
 });
 

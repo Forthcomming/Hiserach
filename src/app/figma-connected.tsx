@@ -54,6 +54,24 @@ type QuoteTarget = {
   stance?: "recommend" | "not_recommend";
 };
 
+type ApiErrorPayload = {
+  code?: string;
+  message?: string;
+  retryable?: boolean;
+};
+
+class ApiRequestError extends Error {
+  constructor(
+    readonly code: string,
+    readonly status: number,
+    readonly retryable: boolean,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 const storageKey = "hisearch-figma-sessions-v1";
 const conditionNames: Record<string, string> = {
   skin_issue: "皮肤状态",
@@ -82,11 +100,32 @@ const traceLabels: Record<string, string> = {
   persist_trace: "记录执行过程",
 };
 
+function streamErrorMessage(code: string): string {
+  if (code === "RATE_LIMITED") return "请求太频繁了，请稍等一会儿再试";
+  if (code === "MODEL_UNAVAILABLE") return "生成服务暂时不可用，请稍后重试";
+  if (code === "NOT_FOUND" || code === "FORBIDDEN") return "当前会话已失效，请重新进入";
+  return "生成失败，请稍后重试";
+}
+
+async function responseError(response: Response, fallback: string): Promise<ApiRequestError> {
+  let payload: ApiErrorPayload = {};
+  try {
+    payload = (await response.json()) as ApiErrorPayload;
+  } catch {
+    // 网关错误等场景不一定返回 JSON，保留对用户安全的兜底文案。
+  }
+  return new ApiRequestError(
+    payload.code || "INTERNAL",
+    response.status,
+    Boolean(payload.retryable),
+    payload.message || fallback,
+  );
+}
+
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || "请求失败，请重试");
-  return data as T;
+  if (!response.ok) throw await responseError(response, "请求失败，请重试");
+  return (await response.json()) as T;
 }
 
 function valueOf(memory: MemoryRecord) {
@@ -589,6 +628,7 @@ function ConnectedSheet({
     const params = new URLSearchParams({ sessionId, productId: target.productId });
     if (target.reasonId) params.set("reasonId", target.reasonId);
     if (target.stance) params.set("stance", target.stance);
+    params.set("allowedQuoteIds", target.allowedIds.join(","));
     setStatus("正在读取原话...");
     json<{ quotes: QuoteItem[] }>(`/api/quotes?${params}`)
       .then((data) => {
@@ -943,6 +983,13 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
     setSessions(next);
     localStorage.setItem(storageKey, JSON.stringify(next));
   }
+  async function createSession(persona: Persona): Promise<SessionInfo> {
+    return json<SessionInfo>("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ persona }),
+    });
+  }
   async function choose(persona: Persona) {
     setBusy(true);
     try {
@@ -955,11 +1002,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
         }
       }
       if (!next) {
-        next = await json<SessionInfo>("/api/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ persona }),
-        });
+        next = await createSession(persona);
         save({ ...sessions, [persona]: next });
       }
       setIdentity(persona);
@@ -1006,17 +1049,45 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
         ? `婴儿米粉推荐，${message}`
         : message;
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: session.sessionId,
-          message: contextualMessage,
-          followupSelection: selection,
-        }),
-      });
-      if (!response.ok || !response.body) throw new Error("暂时无法生成答案");
-      const reader = response.body.getReader();
+      const requestChat = async (sessionId: string) => {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            message: contextualMessage,
+            followupSelection: selection,
+          }),
+        });
+        if (!response.ok) throw await responseError(response, "生成失败，请稍后重试");
+        if (!response.body)
+          throw new ApiRequestError("INTERNAL", response.status, true, "没有收到答案，请重试");
+        return response.body;
+      };
+
+      let recoveredSession = false;
+      let body: ReadableStream<Uint8Array>;
+      try {
+        body = await requestChat(session.sessionId);
+      } catch (cause) {
+        const sessionExpired =
+          cause instanceof ApiRequestError &&
+          (cause.code === "NOT_FOUND" || cause.code === "FORBIDDEN");
+        if (!sessionExpired || !identity) throw cause;
+
+        const replacement = await createSession(identity);
+        let latest: Partial<Record<Persona, SessionInfo>> = {};
+        try {
+          latest = JSON.parse(localStorage.getItem(storageKey) || "{}");
+        } catch {
+          // 损坏的本地缓存直接用新会话覆盖。
+        }
+        save({ ...latest, [identity]: replacement });
+        body = await requestChat(replacement.sessionId);
+        recoveredSession = true;
+      }
+
+      const reader = body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let turnId = "";
@@ -1035,12 +1106,18 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
           if (event.type === "answer.data") answer = event.answer;
           if (event.type === "memory.changed")
             setNotice({ text: event.summary, undoToken: event.undoToken });
-          if (event.type === "turn.failed") throw new Error("生成失败，请稍后重试");
+          if (event.type === "turn.failed")
+            throw new ApiRequestError(
+              event.code,
+              200,
+              event.retryable,
+              streamErrorMessage(event.code),
+            );
         }
       }
       if (!answer) throw new Error("没有收到答案，请重试");
       setTurns((prev) => {
-        const next = replaceLast ? prev.slice(0, -1) : prev;
+        const next = recoveredSession ? [] : replaceLast ? prev.slice(0, -1) : prev;
         return [
           ...next,
           {
@@ -1053,6 +1130,7 @@ export default function FigmaConnectedApp({ fixtureMode }: { fixtureMode: boolea
           },
         ];
       });
+      if (recoveredSession) setNotice({ text: "会话已自动恢复，并重新生成了答案" });
     } catch (cause) {
       setNotice({ text: cause instanceof Error ? cause.message : "搜索失败" });
     } finally {
