@@ -10,27 +10,31 @@ import type {
   ToolBundle,
 } from "@/domain/types";
 
+/**
+ * json_object 是非严格模式，模型常省略空数组字段。给这些字段兜底空数组，
+ * 避免整份结果因缺字段被判解析失败而降级；事实仍由 validate_answer 逐项校验。
+ */
 const UnderstandSchema = z.object({
   intent: z.enum(["supported", "unsupported"]),
   category: z.enum(["beauty", "baby_food"]).optional(),
-  productIds: z.array(z.string()),
+  productIds: z.array(z.string()).default([]),
   statedConditions: z.array(
     z.object({
       key: z.string(),
       value: z.string(),
       raw: z.string().optional(),
     }),
-  ),
+  ).default([]),
   normalizedQuery: z.string().optional(),
 });
 
 const DraftSchema = z.object({
-  headline: z.string(),
+  headline: z.string().default(""),
   similarAuthorCount: z.number().optional(),
   similarRecommendRate: z.number().optional(),
-  quoteIds: z.array(z.string()),
-  reasonIds: z.array(z.string()),
-  alternativeProductIds: z.array(z.string()),
+  quoteIds: z.array(z.string()).default([]),
+  reasonIds: z.array(z.string()).default([]),
+  alternativeProductIds: z.array(z.string()).default([]),
 });
 
 export interface ModelGateway {
@@ -68,8 +72,21 @@ function parseStructured<T>(text: string, schema: z.ZodType<T>): T | null {
     .trim();
   try {
     const parsed = schema.safeParse(JSON.parse(cleaned));
-    return parsed.success ? parsed.data : null;
-  } catch {
+    if (!parsed.success) {
+      console.warn(
+        "[model] 结构化结果校验失败:",
+        parsed.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; "),
+        "| raw:", cleaned.slice(0, 200),
+      );
+      return null;
+    }
+    return parsed.data;
+  } catch (error) {
+    console.warn(
+      "[model] 结构化结果解析失败:",
+      error instanceof Error ? error.message : String(error),
+      "| raw:", cleaned.slice(0, 200),
+    );
     return null;
   }
 }
@@ -121,9 +138,20 @@ class OpenAiCompatibleGateway implements ModelGateway {
     const timeout = new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), serverEnv.llmTimeoutMs);
     });
+    // json_object 不携带字段结构，必须在提示词里给出 schema，否则模型会自由发挥。
+    let shapeHint = "";
+    try {
+      shapeHint = JSON.stringify(z.toJSONSchema(schema));
+    } catch {
+      // 无法转换时退化为纯提示，解析失败会走确定性兜底
+    }
     const request = generateText({
       model,
-      system: `${system}\n只输出一个 JSON 对象，不要解释、不要 markdown 代码块。`,
+      system: [
+        system,
+        "只输出一个 JSON 对象，不要解释、不要 markdown 代码块，不要输出 schema 之外的字段。",
+        `必须严格符合以下 JSON Schema：\n${shapeHint}`,
+      ].join("\n"),
       prompt,
     })
       .then((r) => parseStructured<T>(r.text, schema))
